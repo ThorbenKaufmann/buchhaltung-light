@@ -1,0 +1,14 @@
+# Empfohlene Branch-Protection-Regeln
+branches:
+  - name: main
+    required_pull_request_reviews: 1
+    enforce_admins: true
+    required_status_checks:
+      strict: true
+      contexts: []
+  - name: develop
+    required_pull_request_reviews: 0
+    enforce_admins: false
+    required_status_checks:
+      strict: false
+      contexts: []
