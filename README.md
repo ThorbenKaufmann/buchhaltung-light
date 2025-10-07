@@ -38,12 +38,15 @@ psql -h dbserver-url -U postgres -d bhl -f sql/schema.sql
 # 2. Python-Umgebung
 python3 -m venv venv
 source venv/bin/activate
-pip install psycopg2-binary pandas pyyaml
+pip install psycopg2-binary pandas pyyaml mt-940 psycopg2-binary
 
 # 3. Konfiguration anpassen
 cp config/db.yaml.example config/db.yaml
 
-# 4. Testimport
+# 4. Bankkonten anlegen
+psql -h dbserver-url -U postgres -d bhl -f sql/accounts.sql
+
+# 5. Testimport
 python/python import_csv.py samples/sample.csv
 
 
