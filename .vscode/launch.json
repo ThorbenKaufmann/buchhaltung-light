@@ -1,0 +1,52 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Import MT940 File",
+      "program": "${workspaceFolder}/python/import_mt940.py",
+      "args": [
+        "${input:mt940File}",
+        "${input:accountId}"
+      ],
+      "console": "integratedTerminal"
+    },
+  
+  
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Import MT940 File - internal.",
+      "program": "${workspaceFolder}/python/import_mt940.py",
+      "args": [
+        "./secret/Umsaetze_2802618700_2025.mta",
+        "1"
+      ],
+      "console": "integratedTerminal"
+    },
+
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Read ZugFeRD.",
+      "program": "${workspaceFolder}/python/bhl_zugferd.py",
+      "args": [
+        "./backlog/Rechnung RE20250020.pdf"
+      ],
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "mt940File",
+      "type": "promptString",
+      "description": "Path to the MT940 file to import (e.g. secret/Umsaetze_2802618700_2025.mta)"
+    },
+    {
+      "id": "accountId",
+      "type": "promptString",
+      "description": "Account ID for import"
+    }
+  ]
+}
