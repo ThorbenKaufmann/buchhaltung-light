@@ -50,3 +50,40 @@ psql -h dbserver-url -U postgres -d bhl -f sql/accounts.sql
 python/python import_csv.py samples/sample.csv
 
 
+🔹 4. Beispiele
+
+Alle Konten anzeigen:
+
+python3 python/manage_accounts.py --list
+
+
+Nach Begriff suchen:
+
+python3 python/manage_accounts.py --search Porto
+
+
+Neues Konto anlegen oder ändern:
+
+python3 python/manage_accounts.py --add 4950 "Werkzeuge und Kleinmaterial" 19 Aufwand
+
+
+
+
+✅ Verwendung
+
+Interaktiv mit PDF-Vorschau:
+
+python3 python/assign_accounts.py --direction incoming --month 2024-01 --show-pdf
+
+
+Automatisch mit Regeln (Batch-Modus):
+
+python3 python/assign_accounts.py --direction incoming --month 2024-01 --auto
+
+
+Beide kombiniert:
+
+python3 python/assign_accounts.py --direction incoming --month 2024-01 --show-pdf --auto
+
+
+

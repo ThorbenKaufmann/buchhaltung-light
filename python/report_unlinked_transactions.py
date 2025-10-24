@@ -23,13 +23,16 @@ def report_unlinked_transactions(month=None):
 
     cur.execute("""
         SELECT t.id, t.booking_date, t.amount, t.counterpart_name, t.purpose
-          FROM transactions t
-          LEFT JOIN voucher_links v ON v.transaction_id = t.id
-          LEFT JOIN outgoing_links o ON o.transaction_id = t.id
-         WHERE v.id IS NULL AND o.id IS NULL
-           AND t.booking_date BETWEEN %s AND %s
-         ORDER BY t.booking_date;
+        FROM transactions t
+        LEFT JOIN voucher_links v ON v.transaction_id = t.id
+        LEFT JOIN outgoing_links o ON o.transaction_id = t.id
+        WHERE v.id IS NULL
+        AND o.id IS NULL
+        AND (t.is_private IS FALSE OR t.is_private IS NULL)
+        AND t.booking_date BETWEEN %s AND %s
+        ORDER BY t.booking_date;
     """, (start, end))
+
 
     rows = cur.fetchall()
     if not rows:

@@ -125,12 +125,14 @@ def match_vouchers(direction: str, month: str | None):
         cur.execute(
             """
             SELECT id, booking_date, amount, counterpart_name, purpose
-              FROM transactions
-             WHERE booking_date BETWEEN %s AND %s
-               AND ABS(amount) BETWEEN %s*0.9 AND %s*1.1;
+            FROM transactions
+            WHERE booking_date BETWEEN %s AND %s
+            AND (is_private IS FALSE OR is_private IS NULL)
+            AND ABS(amount) BETWEEN %s*0.9 AND %s*1.1;
             """,
             (start_date, end_date, abs(amount), abs(amount)),
         )
+
         txs = cur.fetchall()
 
         if not txs:

@@ -127,7 +127,7 @@ def add_voucher(pdf_path: str, base_dir: str):
         voucher_date = datetime.today().strftime("%Y-%m-%d")
     description = prompt("Kurzbeschreibung", description if auto_info else None)
     total_amount = float(prompt("Gesamtbetrag (brutto, EUR)", str(total_amount) if auto_info else "0").replace(",", "."))
-    document_type = prompt("Typ (invoice/receipt/self_issued/other)", document_type if auto_info else "invoice")
+    document_type = prompt("Typ ([invoice]/receipt/self_issued/other)", document_type if auto_info else "invoice")
 
     # Zielverzeichnis (Jahr/Monat) automatisch erzeugen
     target_dir = ensure_target_dir(base_dir, voucher_date)
