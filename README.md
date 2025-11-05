@@ -87,3 +87,37 @@ python3 python/assign_accounts.py --direction incoming --month 2024-01 --show-pd
 
 
 
+
+python3 python/set_receipt_status.py voucher 97 complete
+python3 python/set_receipt_status.py booking 233 missing
+
+python3 python/match_vouchers.py --direction incoming --link --voucher-id 21 --tx-id 5991
+python3 python/match_vouchers.py --direction incoming --month 2024-01
+
+python3 python/unmatch_transaction.py --tx-id 6023
+python3 python/unmatch_transaction.py --tx-id 6023 --unmatch
+
+
+🔹 Belegnummer korrigieren
+python3 python/revise_voucher.py --id 91 --field voucher_number --new RE20250021 --reason "Nummer korrigiert"
+
+🔹 Beleg stornieren
+python3 python/revise_voucher.py --id 91 --cancel "Falscher Lieferant, neu erfasst"
+
+🔹 Historie anzeigen
+python3 python/revise_voucher.py --id 91 --show-history
+
+
+→ Beispielausgabe:
+
+📜 Revisionshistorie für Beleg-ID 91:
+
+🕒 2025-10-09 08:44 | UPDATE     | Feld: voucher_number     | RE20250020 → RE20250021 | Grund: Nummer korrigiert
+🕒 2025-10-09 08:49 | CANCELLED  | Feld: status             | paid → cancelled         | Grund: Falscher Lieferant, neu erfasst
+
+
+./python/create_self_voucher.py --date 2024-09-24 --partner "Camping Wagner"--amount 5.00 --reason "Mahngebühren zu Rechnung K20008-R4882538" --output belege/2024/09 --add-to-vouchers
+
+✅ Eigenbeleg EB-2024-001 erstellt.
+   Hash: 2e5cfb6e3dfafc5b45acbe4b7f6a9c2b...
+   PDF:  /home/.../belege/2024/07/EB-2024-001.pdf

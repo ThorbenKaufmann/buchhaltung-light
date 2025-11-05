@@ -106,6 +106,19 @@ def add_voucher(pdf_path: str, base_dir: str):
             supplier = auto_info.get("seller") or ""
             voucher_number = auto_info.get("number") or ""
             voucher_date = auto_info.get("date") or datetime.today().strftime("%Y-%m-%d")
+            # --- Datumsformat vereinheitlichen ---
+            if voucher_date and re.match(r"^\d{8}$", voucher_date):
+                # XML-Format 20240402 -> 2024-04-02
+                voucher_date = f"{voucher_date[:4]}-{voucher_date[4:6]}-{voucher_date[6:8]}"
+            elif voucher_date and re.match(r"^\d{4}-\d{2}-\d{2}$", voucher_date):
+                pass  # schon korrekt
+            else:
+                try:
+                    # letzte Rettung: versuchen, es zu parsen
+                    voucher_date = datetime.fromisoformat(str(voucher_date)).strftime("%Y-%m-%d")
+                except Exception:
+                    voucher_date = datetime.today().strftime("%Y-%m-%d")
+
             total_amount = auto_info.get("amount") or 0.0
             document_type = "invoice"
             description = f"{auto_info.get('xml_type','invoice')} erkannt"
@@ -161,15 +174,17 @@ def add_voucher(pdf_path: str, base_dir: str):
     cur = conn.cursor()
 
     try:
+        receipt_status = 'complete' if os.path.isfile(pdf_path) else 'pending'
+
         cur.execute(
             """
             INSERT INTO vouchers
                 (voucher_number, voucher_date, partner_name, description,
-                total_amount, currency, document_type, source, status)
+                total_amount, currency, document_type, source, status, receipt_status)
             VALUES (%s,%s,%s,%s,%s,'EUR',%s,'manual','draft')
             RETURNING id;
             """,
-            (voucher_number, voucher_date, supplier, description, total_amount, document_type),
+            (voucher_number, voucher_date, supplier, description, total_amount, document_type, receipt_status),
         )
         voucher_id = cur.fetchone()[0]
         conn.commit()

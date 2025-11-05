@@ -1,238 +1,174 @@
 #!/usr/bin/env python3
 """
-assign_accounts.py – Version 4
-Kontiert Belege auf SKR03-Konten (verknüpft mit skr03_accounts, PDF-Vorschau aus DB, optional Auto-Modus).
+assign_accounts.py
+Interaktive oder regelbasierte Zuordnung von Belegen (incoming/outgoing)
+zu SKR03-Konten inklusive automatischer USt-/VSt-Klassifikation (tax_type).
+
+Beispiel:
+    python3 python/assign_accounts.py --direction incoming --month 2024-01
+    python3 python/assign_accounts.py --direction outgoing --month 2024-12 --show-pdf
 """
 
 import argparse
-import os
 import subprocess
-from glob import glob
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timedelta
 from db import get_connection
 
+# ------------------------------------------------------------
+# Steuerlogik für SKR03 / USt-Klassifikation
+# ------------------------------------------------------------
+def determine_tax_type(direction: str, tax_rate: Decimal, note: str | None = None) -> str:
+    """Leitet die steuerliche Kategorie (tax_type) ab."""
+    if note and "reverse" in note.lower():
+        return "reverse_charge"
+    if note and "ig" in note.lower():
+        return "ig_erwerb"
 
-# ------------------------------------------------------------
-# Hilfsfunktionen
-# ------------------------------------------------------------
-def find_rule(cur, name, direction):
+    if direction == "incoming":
+        if tax_rate == 19:
+            return "vst19"
+        elif tax_rate == 7:
+            return "vst7"
+        else:
+            return "vst0"
+    elif direction == "outgoing":
+        if tax_rate == 19:
+            return "ust19"
+        elif tax_rate == 7:
+            return "ust7"
+        else:
+            return "ust0"
+    return None
+
+
+def find_rule(cur, name: str, direction: str):
+    """Versucht, eine passende Buchungsregel aus booking_rules zu finden."""
     cur.execute("""
-        SELECT default_account, default_tax, note
+        SELECT pattern, default_account, default_tax, direction, note
           FROM booking_rules
          WHERE direction = %s
-           AND position(lower(pattern) in lower(%s)) > 0
-         ORDER BY LENGTH(pattern) DESC
-         LIMIT 1;
-    """, (direction, name))
-    return cur.fetchone()
+      ORDER BY LENGTH(pattern) DESC;
+    """, (direction,))
+    rules = cur.fetchall()
+
+    for pattern, account, tax, dirn, note in rules:
+        if pattern.lower() in name.lower():
+            return (account, Decimal(tax), note)
+    return None
 
 
 def get_account_info(cur, account_id):
-    cur.execute("""
-        SELECT id, name, default_tax
-          FROM skr03_accounts
-         WHERE id = %s;
-    """, (account_id,))
+    """Lädt Kontoinformationen aus SKR03-Tabelle."""
+    cur.execute("SELECT id, name, tax_rate FROM skr03_accounts WHERE id = %s;", (account_id,))
     return cur.fetchone()
 
 
 def list_accounts(cur):
+    """Zeigt gängige Konten an (nur Auszug, zur Orientierung)."""
     cur.execute("""
-        SELECT id, name, default_tax
+        SELECT id, name, tax_rate
           FROM skr03_accounts
-         WHERE is_active = TRUE
-         ORDER BY id;
+         ORDER BY id
+         LIMIT 15;
     """)
-    return cur.fetchall()
+    print("  Verfügbare Konten (Auszug):")
+    for acc_id, name, tax_rate in cur.fetchall():
+        print(f"     {acc_id:6} | {name:40s} | {tax_rate:.2f}%")
 
 
-def open_voucher_from_db(cur, voucher_id):
-    """
-    Öffnet den PDF-Beleg anhand voucher_documents.voucher_id.
-    """
-    cur.execute("""
-        SELECT file_path, file_name
-          FROM voucher_documents
-         WHERE voucher_id = %s
-         ORDER BY id DESC
-         LIMIT 1;
-    """, (voucher_id,))
-    row = cur.fetchone()
-
-    if not row:
-        return False
-
-    rel_path = os.path.join(row[0], row[1]) if row[1] else row[0]
-    pdf_path = os.path.normpath(rel_path)
-    if not os.path.isfile(pdf_path):
-        print(f"  ⚠️  Datei {pdf_path} existiert nicht.")
-        return False
-
-    print(f"  📄 Öffne Beleg: {pdf_path}")
-    try:
-        if os.name == "posix":
-            subprocess.Popen(["xdg-open", pdf_path],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        elif os.name == "nt":
-            os.startfile(pdf_path)
-        else:
-            subprocess.Popen(["open", pdf_path])
-        return True
-    except Exception as e:
-        print(f"  ⚠️  Konnte PDF nicht öffnen: {e}")
-        return False
-
-
-def open_voucher_fallback(voucher_date, voucher_number=None, partner_name=None):
-    """Fallback-Suche im belege/<Jahr>/<Monat>/"""
-    year = voucher_date.strftime("%Y")
-    month = voucher_date.strftime("%m")
-    base_path = os.path.join("belege", year, month)
-    if not os.path.isdir(base_path):
-        return False
-    pattern = "*.pdf"
-    if voucher_number:
-        pattern = f"*{voucher_number}*.pdf"
-    elif partner_name:
-        pattern = f"*{partner_name.split()[0]}*.pdf"
-    matches = glob(os.path.join(base_path, pattern))
-    if not matches:
-        return False
-    pdf_path = matches[0]
-    print(f"  📄 Öffne Beleg (Fallback): {pdf_path}")
-    try:
-        if os.name == "posix":
-            subprocess.Popen(["xdg-open", pdf_path],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        elif os.name == "nt":
-            os.startfile(pdf_path)
-        else:
-            subprocess.Popen(["open", pdf_path])
-        return True
-    except Exception:
-        return False
-
-
-# ------------------------------------------------------------
-# Hauptfunktion
-# ------------------------------------------------------------
-def assign_accounts(direction, month=None, show_pdf=False, auto=False):
+def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
+    """Weist Belegen Konten zu."""
     conn = get_connection()
     cur = conn.cursor()
 
-    if direction == "incoming":
-        table, id_field, name_field, date_field = "vouchers", "id", "partner_name", "voucher_date"
-    else:
-        table, id_field, name_field, date_field = "outgoing_vouchers", "id", "customer_name", "invoice_date"
+    mdate = datetime.strptime(month, "%Y-%m")
+    start = mdate.replace(day=1)
+    end = (start + timedelta(days=32)).replace(day=1)
+    vtable = "vouchers" if direction == "incoming" else "outgoing_vouchers"
+    id_field = "voucher_id" if direction == "incoming" else "outgoing_id"
 
-    # Zeitraum
-    if month:
-        mdate = datetime.strptime(month, "%Y-%m")
-        start = mdate.replace(day=1)
-        end = (start + timedelta(days=32)).replace(day=1)
-        print(f"📅 Zeitraum: {start:%Y-%m-%d} bis {end:%Y-%m-%d}")
-    else:
-        start = datetime(1970, 1, 1)
-        end = datetime(2100, 1, 1)
-
-    # Belege ohne Kontierung
+    # Belege ohne Kontierung holen
     cur.execute(f"""
-        SELECT {id_field}, {name_field}, total_amount, {date_field}
-          FROM {table}
-         WHERE {date_field} BETWEEN %s AND %s
+        SELECT id, partner_name, total_amount, voucher_date
+          FROM {vtable}
+         WHERE {vtable}.status != 'cancelled'
+           AND {vtable}.voucher_date BETWEEN %s AND %s
            AND id NOT IN (
-                SELECT COALESCE(voucher_id, outgoing_id)
-                  FROM booking_lines
-                  WHERE direction = %s
+               SELECT {id_field} FROM booking_lines WHERE {id_field} IS NOT NULL
            )
-         ORDER BY {date_field};
-    """, (start, end, direction))
+         ORDER BY voucher_date;
+    """, (start, end))
     vouchers = cur.fetchall()
-    if not vouchers:
-        print("✅ Keine unkontierten Belege gefunden.")
-        return
 
+    print(f"📅 Zeitraum: {start.date()} bis {end.date()}")
     print(f"\n{len(vouchers)} Beleg(e) ohne Kontierung gefunden.\n")
 
-    for vid, name, total, vdate in vouchers:
+    for vid, name, amount, vdate in vouchers:
         print("=" * 70)
-        print(f"Beleg-ID {vid} | {name or '(kein Name)'} | {total:.2f} EUR | {vdate}")
+        print(f"Beleg-ID {vid} | {name} | {amount:.2f} EUR | {vdate}")
 
+        # zugehörigen Beleg anzeigen (optional)
         if show_pdf:
-            if not open_voucher_from_db(cur, vid):
-                open_voucher_fallback(vdate, voucher_number=str(vid), partner_name=name)
+            cur.execute("SELECT file_path, file_name FROM voucher_documents WHERE voucher_id = %s;", (vid,))
+            doc = cur.fetchone()
+            if doc:
+                path, fname = doc
+                pdf_path = f"{path}/{fname}"
+                print(f"  📄 Öffne Beleg: {pdf_path}")
+                try:
+                    subprocess.Popen(["brave-browser", pdf_path])
+                except Exception as e:
+                    print(f"  ⚠️  PDF konnte nicht geöffnet werden: {e}")
 
-        # Regelvorschlag
+        # Regel prüfen
         rule = find_rule(cur, name or "", direction)
-        if not rule:
-            if auto:
-                print("  ⚙️  Keine Regel gefunden → übersprungen (Auto-Modus).")
-                continue
-            print("  ⚙️  Keine Regel gefunden.")
-            acc_list = list_accounts(cur)[:10]
-            for acc in acc_list:
-                print(f"     {acc[0]:6s} | {acc[1]:40s} | {acc[2]}%")
+        if rule:
+            account, tax_rate, note = rule
+            print(f"  ⚙  Regel gefunden: Konto {account} ({note or 'keine Notiz'}) | {tax_rate:.2f}%")
+        else:
+            print("  ⚙  Keine Regel gefunden.")
+            list_accounts(cur)
             account = input("  Konto (SKR03): ").strip()
-            acc_info = get_account_info(cur, account)
-            if not acc_info:
-                print(f"  ⚠️  Konto {account} existiert nicht. Übersprungen.\n")
+            if not account:
+                print("  ➜ übersprungen.\n")
                 continue
-            tax = acc_info[2]
-        else:
-            account, tax, note = rule
-            acc_info = get_account_info(cur, account)
-            if not acc_info:
-                print(f"  ⚠️  Regel verweist auf unbekanntes Konto {account}.")
-                continue
-            acc_name = acc_info[1]
-            print(f"  → Vorschlag: Konto {account} ({acc_name}), Steuer {tax}% ({note})")
+            tax_rate = Decimal(input("  Steuersatz (z. B. 19, 7, 0): ") or "19")
+            note = None
 
-        try:
-            tax = float(tax)
-        except ValueError:
-            tax = acc_info[2] if acc_info else 19.0
-
-        net = round(float(total) / (1 + tax / 100), 2)
-        tax_amount = round(float(total) - net, 2)
-        acc_name = acc_info[1] if acc_info else ""
-
-        if not auto:
-            confirm = input(f"  Verbuchen als {account} ({acc_name}) {tax}% [y/N]? ").strip().lower()
-            if confirm != "y":
-                print("  ➜ Übersprungen.\n")
-                continue
-        else:
-            print(f"  ⚡ Auto-Kontierung: {account} ({acc_name}) {tax}%")
+        # Buchungsdaten berechnen
+        gross = Decimal(amount)
+        net = (gross / (Decimal(1) + tax_rate / 100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        tax_amount = (net * tax_rate / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        tax_type = determine_tax_type(direction, tax_rate, note)
 
         cur.execute("""
-            INSERT INTO booking_lines (direction, voucher_id, outgoing_id,
-                                       account_skr, description,
-                                       net_amount, tax_rate, tax_amount, gross_amount)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s);
-        """, (
-            direction,
-            vid if direction == "incoming" else None,
-            vid if direction == "outgoing" else None,
-            account, name,
-            net, tax, tax_amount, total
-        ))
+            INSERT INTO booking_lines
+                (direction, {id_field}, account_skr, description,
+                 net_amount, tax_rate, tax_amount, gross_amount,
+                 receipt_status, created_at, tax_type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'complete',NOW(),%s);
+        """.format(id_field=id_field),
+            (direction, vid, account, note or "", net, tax_rate, tax_amount, gross, tax_type)
+        )
+
         conn.commit()
-        print(f"  ✅ Kontierung gespeichert: {account} ({acc_name}), Netto {net:.2f} €, Steuer {tax_amount:.2f} €.\n")
+        print(f"  ✅ Beleg {vid} → Konto {account} ({tax_type}) verbucht.\n")
 
     cur.close()
     conn.close()
-    print("\n✅ Alle Belege bearbeitet.\n")
+    print("✅ Zuordnung abgeschlossen.")
 
 
-# ------------------------------------------------------------
-# CLI
-# ------------------------------------------------------------
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Kontiert Belege auf SKR03-Konten (mit PDF-Vorschau aus DB).")
-    ap.add_argument("--direction", required=True, choices=["incoming", "outgoing"])
-    ap.add_argument("--month", help="YYYY-MM (optional)")
-    ap.add_argument("--show-pdf", action="store_true", help="Zeigt den Beleg im PDF-Viewer an (falls vorhanden)")
-    ap.add_argument("--auto", action="store_true", help="Automatische Kontierung bei eindeutiger Regel (ohne Nachfrage)")
+def main():
+    ap = argparse.ArgumentParser(description="Weist Belegen Konten (SKR03) zu.")
+    ap.add_argument("--direction", choices=["incoming", "outgoing"], required=True)
+    ap.add_argument("--month", required=True, help="Monat (YYYY-MM)")
+    ap.add_argument("--show-pdf", action="store_true", help="Beleg im PDF-Viewer öffnen")
+    ap.add_argument("--auto", action="store_true", help="Nur bestehende Regeln verwenden (keine manuelle Eingabe)")
     args = ap.parse_args()
-
     assign_accounts(args.direction, args.month, args.show_pdf, args.auto)
+
+
+if __name__ == "__main__":
+    main()

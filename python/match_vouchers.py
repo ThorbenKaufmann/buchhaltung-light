@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
-match_vouchers.py – Version 3
-Berücksichtigt Zahlungsziel und sucht Transaktionen nur ab Rechnungsdatum (−1 Tag)
-bis zum Zahlungsziel (+ Toleranz).
-
-• vergleicht Beträge betragsweise (abs)
-• berücksichtigt payment_due_date (optional)
-• zeigt bis zu 3 Kandidaten mit Score an
-• erlaubt interaktive Auswahl
-• nutzt rapidfuzz, falls verfügbar
+match_vouchers.py v4 – erweiterte Version mit besserem Matching
 """
 
 import sys
 import argparse
 from datetime import datetime, timedelta
+from decimal import Decimal
 from db import get_connection
 
+# -------------------------------------------------------------------
+#  Fuzzy Matching Setup
+# -------------------------------------------------------------------
 try:
     from rapidfuzz import fuzz
     def name_similarity(a, b):
@@ -27,16 +23,41 @@ except ImportError:
             return 0.0
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
+# -------------------------------------------------------------------
+#  Helper Functions
+# -------------------------------------------------------------------
+def normalize_name(name: str) -> str:
+    """Entfernt juristische Zusätze und Vereinheitlicht Namen"""
+    if not name:
+        return ""
+    n = name.lower()
+    replacements = {
+        "gmbh & co. kg": "gmbh",
+        "gmbh & co.": "gmbh",
+        "gmbh.": "gmbh",
+        "ug (haftungsbeschränkt)": "ug",
+        "s.a.r.l.": "",
+        "et cie": "",
+        "ag & co.": "ag",
+        "ag.": "ag",
+        "sarl": "",
+        "paypal europe": "",
+        "finion capital": "",
+    }
+    for k, v in replacements.items():
+        n = n.replace(k, v)
+    return " ".join(n.split())
 
 def amount_match_score(a, b):
+    """Bewertet Ähnlichkeit nach Betrag (absolut)."""
     if a == 0 or b == 0:
         return 0.0
     diff = abs(abs(a) - abs(b))
     rel = diff / abs(a)
     return max(0, 1 - rel * 5)
 
-
 def date_match_score(d1, d2):
+    """Bewertet zeitliche Nähe."""
     delta = abs((d1 - d2).days)
     if delta <= 1:
         return 1.0
@@ -46,20 +67,33 @@ def date_match_score(d1, d2):
         return 0.6
     elif delta <= 14:
         return 0.4
+    elif delta <= 30:
+        return 0.2
     else:
         return 0.0
 
+def compute_score(v_amount, t_amount, v_date, t_date, v_name, t_name, purpose, normalize=False):
+    if normalize:
+        v_name, t_name, purpose = map(normalize_name, [v_name, t_name, purpose])
+    # Sicherstellen, dass keine Decimal-Werte in Berechnung eingehen
+    v_amount_f = float(v_amount)
+    t_amount_f = float(t_amount)
 
-def compute_score(v_amount, t_amount, v_date, t_date, v_name, t_name, purpose):
-    v_amount = float(v_amount)
-    t_amount = float(t_amount)
-    s_amount = amount_match_score(abs(v_amount), abs(t_amount))
+    s_amount = amount_match_score(abs(v_amount_f), abs(t_amount_f))
     s_date = date_match_score(v_date, t_date)
-    s_name = max(name_similarity(v_name, t_name), name_similarity(v_name, purpose))
-    return s_amount * 0.5 + s_date * 0.3 + s_name * 0.2
+    s_name = max(
+        name_similarity(v_name, t_name),
+        name_similarity(v_name, purpose),
+        name_similarity(v_name, t_name + " " + purpose)
+    )
+    score = (float(s_amount) * 0.4) + (float(s_date) * 0.3) + (float(s_name) * 0.3)
 
+    return score
 
-def match_vouchers(direction: str, month: str | None):
+# -------------------------------------------------------------------
+#  Hauptfunktion
+# -------------------------------------------------------------------
+def match_vouchers(direction, month=None, window=30, show_all=False, normalize_names=False):
     conn = get_connection()
     cur = conn.cursor()
 
@@ -67,36 +101,27 @@ def match_vouchers(direction: str, month: str | None):
         print("❌ Ungültige Richtung. Bitte --direction incoming|outgoing angeben.")
         sys.exit(1)
 
-    # Tabellen und Felder
+    # Tabellenwahl
     if direction == "incoming":
-        voucher_table = "vouchers"
-        link_table = "voucher_links"
-        name_field = "partner_name"
-        date_field = "voucher_date"
-        due_field = "payment_due_date"
-        id_field = "voucher_id"
+        voucher_table, link_table, name_field, date_field, id_field = (
+            "vouchers", "voucher_links", "partner_name", "voucher_date", "voucher_id"
+        )
     else:
-        voucher_table = "outgoing_vouchers"
-        link_table = "outgoing_links"
-        name_field = "customer_name"
-        date_field = "invoice_date"
-        due_field = "payment_due_date"
-        id_field = "outgoing_id"
+        voucher_table, link_table, name_field, date_field, id_field = (
+            "outgoing_vouchers", "outgoing_links", "customer_name", "invoice_date", "outgoing_id"
+        )
 
-    # Zeitraumfilter
+    # Zeitraum
     if month:
         mdate = datetime.strptime(month, "%Y-%m")
         start = mdate.replace(day=1)
         end = (start + timedelta(days=32)).replace(day=1)
     else:
-        start = datetime(1970, 1, 1)
-        end = datetime(2100, 1, 1)
+        start, end = datetime(1970, 1, 1), datetime(2100, 1, 1)
 
     cur.execute(
         f"""
-        SELECT id, voucher_number, {name_field}, total_amount,
-               {date_field}, COALESCE({due_field}, {date_field} + INTERVAL '14 days') AS payment_due_date,
-               description
+        SELECT id, {name_field}, total_amount, {date_field}, description, voucher_number
           FROM {voucher_table}
          WHERE status != 'paid'
            AND {date_field} BETWEEN %s AND %s
@@ -107,42 +132,33 @@ def match_vouchers(direction: str, month: str | None):
     vouchers = cur.fetchall()
     print(f"{len(vouchers)} Beleg(e) gefunden.\n")
 
-    for vid, number, name, amount, date, due_date, descr in vouchers:
+    for vid, name, amount, date, descr, vnum in vouchers:
         if not amount or not date:
             continue
-
-        # Zeitfenster bestimmen
-        default_days = 14 if amount < 500 else 45
-        if not due_date:
-            due_date = date + timedelta(days=default_days)
-        start_date = date - timedelta(days=14)
-        end_date = due_date + timedelta(days=10)
-
         print("=" * 70)
-        print(f"Beleg-ID {vid} | Rg.-Nr. {number or '-'} | {name} | {amount:.2f} EUR")
-        print(f"  Datum: {date} | Fälligkeit: {due_date.date()} | Beschreibung: {descr or ''}")
+        print(f"Beleg-ID {vid} | {name} | {amount:.2f} EUR | {date} | Nr: {vnum or '-'}")
+
+        start_date = date - timedelta(days=1)
+        end_date = date + timedelta(days=window)
 
         cur.execute(
             """
             SELECT id, booking_date, amount, counterpart_name, purpose
-            FROM transactions
-            WHERE booking_date BETWEEN %s AND %s
-            AND (is_private IS FALSE OR is_private IS NULL)
-            AND ABS(amount) BETWEEN %s*0.9 AND %s*1.1;
+              FROM transactions
+             WHERE booking_date BETWEEN %s AND %s
+               AND ABS(amount) BETWEEN %s*0.8 AND %s*1.2;
             """,
             (start_date, end_date, abs(amount), abs(amount)),
         )
-
         txs = cur.fetchall()
-
         if not txs:
             print("  → Keine Transaktionen im Zeitraum gefunden.")
             continue
 
         candidates = []
         for tid, tdate, tamount, tname, purpose in txs:
-            score = compute_score(amount, tamount, date, tdate, name, tname or "", purpose or "")
-            if score > 0.2:
+            score = compute_score(amount, tamount, date, tdate, name, tname or "", purpose or "", normalize_names)
+            if score > (0.1 if show_all else 0.2):
                 candidates.append((score, tid, tdate, tamount, tname or "", purpose or ""))
 
         if not candidates:
@@ -159,7 +175,6 @@ def match_vouchers(direction: str, month: str | None):
         if sel in ("n", "", "s"):
             print("     ➜ übersprungen.\n")
             continue
-
         try:
             idx = int(sel) - 1
             _, tid, _, tamount, _, _ = candidates[idx]
@@ -183,10 +198,20 @@ def match_vouchers(direction: str, month: str | None):
     conn.close()
     print("\n✅ Matching-Durchlauf beendet.")
 
-
+# -------------------------------------------------------------------
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Verknüpft Belege mit Banktransaktionen.")
+    ap = argparse.ArgumentParser(description="Erweitertes Matching zwischen Belegen und Transaktionen.")
     ap.add_argument("--direction", required=True, help="incoming | outgoing")
     ap.add_argument("--month", help="YYYY-MM (optional)")
+    ap.add_argument("--window", type=int, default=30, help="Zeitraum in Tagen nach Belegdatum (Standard 30)")
+    ap.add_argument("--show-all", action="store_true", help="Zeigt auch schwache Matches (Score > 0.1)")
+    ap.add_argument("--normalize-names", action="store_true", help="Normalisiert juristische Zusätze in Namen")
     args = ap.parse_args()
-    match_vouchers(args.direction, args.month)
+
+    match_vouchers(
+        args.direction,
+        month=args.month,
+        window=args.window,
+        show_all=args.show_all,
+        normalize_names=args.normalize_names,
+    )

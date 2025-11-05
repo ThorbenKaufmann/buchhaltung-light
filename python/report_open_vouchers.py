@@ -21,29 +21,32 @@ def report_open_vouchers(month=None):
         start = datetime(1970, 1, 1)
         end = datetime(2100, 1, 1)
 
+    # ---------------- Eingangsbelege ----------------
     print("📄 Offene Eingangsbelege:\n")
+    # ---------------- Eingangsbelege ----------------
     cur.execute("""
-        SELECT v.voucher_number, v.partner_name, v.total_amount,
-               v.voucher_date, v.payment_due_date
-          FROM vouchers v
-          LEFT JOIN voucher_links l ON v.id = l.voucher_id
-         WHERE l.id IS NULL
-           AND (v.status IS NULL OR v.status != 'paid')
-           AND v.voucher_date BETWEEN %s AND %s
-         ORDER BY v.voucher_date;
+        SELECT v.id, v.voucher_number, v.partner_name, v.total_amount,
+            v.voucher_date, v.payment_due_date
+        FROM vouchers v
+        LEFT JOIN voucher_links l ON v.id = l.voucher_id
+        WHERE l.id IS NULL
+        AND COALESCE(v.status, '') NOT IN ('paid', 'cancelled', 'archived')
+        AND v.voucher_date BETWEEN %s AND %s
+        ORDER BY v.voucher_date;
     """, (start, end))
 
     rows = cur.fetchall()
     if not rows:
         print("  (keine offenen Eingangsbelege)\n")
     else:
-        for num, name, amount, vdate, due in rows:
+        for vid, num, name, amount, vdate, due in rows:
             due_str = due.strftime("%Y-%m-%d") if due else "-"
-            print(f"  {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
+            print(f"  ID {vid:4d} | {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
 
+    # ---------------- Ausgangsbelege ----------------
     print("\n📄 Offene Ausgangsbelege:\n")
     cur.execute("""
-        SELECT o.invoice_number, o.customer_name, o.total_amount,
+        SELECT o.id, o.voucher_number, o.customer_name, o.total_amount,
                o.invoice_date, o.payment_due_date
           FROM outgoing_vouchers o
           LEFT JOIN outgoing_links l ON o.id = l.outgoing_id
@@ -57,9 +60,9 @@ def report_open_vouchers(month=None):
     if not rows:
         print("  (keine offenen Ausgangsbelege)\n")
     else:
-        for num, name, amount, vdate, due in rows:
+        for oid, num, name, amount, vdate, due in rows:
             due_str = due.strftime("%Y-%m-%d") if due else "-"
-            print(f"  {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
+            print(f"  ID {oid:4d} | {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
 
     cur.close()
     conn.close()
