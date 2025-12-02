@@ -1,60 +1,75 @@
 #!/usr/bin/env python3
 """
 add_all_vouchers.py
-Stapelerfassung für Belege.
+Batch-Importer für Belege (Eingang oder Ausgang).
 
-Liest alle PDF-Dateien in einem Quellverzeichnis und ruft für jede Datei das
-add_voucher.py-Modul auf, um den Beleg interaktiv zu erfassen und in die DB einzutragen.
+Verarbeitet alle PDF-Dateien in einem Quellverzeichnis und ruft
+bhl_voucher_base.process_voucher() für jede Datei auf.
 
-Verwendung:
-    python add_all_vouchers.py <source_dir> <target_dir>
+Beispiel:
+    python add_all_vouchers.py ./backlog/in ./belege --direction incoming
+    python add_all_vouchers.py ./backlog/out ./belege/ausgang --direction outgoing
+    python add_all_vouchers.py ./backlog/mixed ./belege --direction auto
 """
 
 import os
 import sys
+import argparse
 import traceback
-from add_voucher import add_voucher
+from bhl_voucher_base import process_voucher
 
 
-def add_all_vouchers(source_dir: str, target_dir: str):
+def add_all_vouchers(source_dir: str, base_dir: str, direction: str):
+    """Verarbeitet alle PDF-Dateien in einem Verzeichnis."""
     if not os.path.isdir(source_dir):
         print(f"❌ Quellverzeichnis nicht gefunden: {source_dir}")
         sys.exit(1)
 
-    pdf_files = sorted(
-        f for f in os.listdir(source_dir)
+    pdfs = [
+        os.path.join(source_dir, f)
+        for f in sorted(os.listdir(source_dir))
         if f.lower().endswith(".pdf") and os.path.isfile(os.path.join(source_dir, f))
-    )
+    ]
 
-    if not pdf_files:
+    if not pdfs:
         print(f"Keine PDF-Dateien im Verzeichnis {source_dir} gefunden.")
         return
 
-    print(f"{len(pdf_files)} Datei(en) gefunden – Starte Stapelverarbeitung.\n")
+    print(f"{len(pdfs)} Datei(en) gefunden – Starte Stapelverarbeitung ({direction}).\n")
 
-    for filename in pdf_files:
-        full_path = os.path.join(source_dir, filename)
+    for idx, path in enumerate(pdfs, 1):
         print("=" * 70)
-        print(f"Beleg: {filename}")
+        print(f"[{idx}/{len(pdfs)}] Beleg: {os.path.basename(path)}")
         print("=" * 70)
         try:
-            add_voucher(full_path, target_dir)
+            process_voucher(path, base_dir, mode=direction)
         except KeyboardInterrupt:
-            print("\nAbgebrochen durch Benutzer.")
+            print("\n⏹  Vom Benutzer abgebrochen.")
             sys.exit(0)
         except Exception as e:
-            print(f"⚠️  Fehler bei {filename}: {e}")
+            print(f"⚠️  Fehler bei {os.path.basename(path)}: {e}")
             traceback.print_exc()
-        print("\n--- Nächster Beleg ---\n")
+            print("\n--- Nächster Beleg ---\n")
 
-    print("✅ Stapelverarbeitung abgeschlossen.")
+    print("\n✅ Stapelverarbeitung abgeschlossen.")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Batch-Importer für Eingangs- oder Ausgangsbelege (ZUGFeRD/XRechnung-fähig)."
+    )
+    ap.add_argument("source_dir", help="Quellverzeichnis mit PDF-Dateien")
+    ap.add_argument("base_dir", help="Zielbasis (z. B. ./belege oder ./belege/ausgang)")
+    ap.add_argument(
+        "--direction",
+        choices=["incoming", "outgoing", "auto"],
+        default="incoming",
+        help="Richtung der Belege: incoming, outgoing oder auto (Standard: incoming)",
+    )
+
+    args = ap.parse_args()
+    add_all_vouchers(args.source_dir, args.base_dir, args.direction)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Verwendung: python add_all_vouchers.py <source_dir> <target_dir>")
-        sys.exit(1)
-
-    source_dir = sys.argv[1]
-    target_dir = sys.argv[2]
-    add_all_vouchers(source_dir, target_dir)
+    main()

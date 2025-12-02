@@ -108,8 +108,9 @@ def match_vouchers(direction, month=None, window=30, show_all=False, normalize_n
         )
     else:
         voucher_table, link_table, name_field, date_field, id_field = (
-            "outgoing_vouchers", "outgoing_links", "customer_name", "invoice_date", "outgoing_id"
+            "outgoing_vouchers", "outgoing_links", "partner_name", "voucher_date", "outgoing_id"
         )
+
 
     # Zeitraum
     if month:

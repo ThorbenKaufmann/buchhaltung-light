@@ -114,8 +114,8 @@ def auto_assign(month, dry_run=False):
               f"→ Konto {account} ({rule['note'] or ''}) | {tax_type} | {receipt_status} "
               f"{' '.join(['['+f+']' for f in flags])}")
 
+         # Flags auf Transaktionsebene aktualisieren
         if not dry_run:
-            # Flag-Update auf Transaktionsebene
             cur.execute("""
                 UPDATE transactions
                    SET is_internal = %s,
@@ -124,18 +124,21 @@ def auto_assign(month, dry_run=False):
                  WHERE id = %s;
             """, (rule["is_internal"], rule["is_private"], rule["is_cyclic"], tid))
 
-            # Buchungszeile anlegen
-            cur.execute("""
-                INSERT INTO booking_lines
-                    (direction, account_skr, description,
-                     net_amount, tax_rate, tax_amount, gross_amount,
-                     receipt_status, created_at, tax_type)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NOW(),%s);
-            """, (
-                direction, account, str(tid),
-                net, tax_rate, tax_amount, gross, receipt_status, tax_type
-            ))
-            assigned += 1
+        # Ausgabe (nur Information)
+        flags = []
+        if rule["is_internal"]:
+            flags.append("INTERNAL")
+        if rule["is_private"]:
+            flags.append("PRIVATE")
+        if rule["is_cyclic"]:
+            flags.append("CYCLIC")
+
+        print(f"💡 {date} | {name[:35] if name else ''} | {gross:.2f} € "
+              f"→ Konto {account} ({rule['note'] or ''}) | {tax_type} | {receipt_status} "
+              f"{' '.join(['['+f+']' for f in flags])}")
+
+        # ⚠️ Kein booking_lines-Insert mehr hier!
+        assigned += 1
 
     if not dry_run:
         conn.commit()

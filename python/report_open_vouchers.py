@@ -1,75 +1,95 @@
 #!/usr/bin/env python3
 """
 report_open_vouchers.py
-Zeigt alle offenen Belege (incoming/outgoing) – optional gefiltert nach Monat.
+-----------------------
+Zeigt offene Eingangs- und Ausgangsbelege mit Buchungs- und Zahlungsstatus an.
+Kennzeichnet Stornos (negative Beträge) automatisch.
 """
 
-import argparse
 from datetime import datetime, timedelta
 from db import get_connection
+from bhl_utils import row_get, format_date, safe_float
 
-def report_open_vouchers(month=None):
+def report_open_vouchers(month: str):
     conn = get_connection()
     cur = conn.cursor()
 
-    if month:
-        mdate = datetime.strptime(month, "%Y-%m")
-        start = mdate.replace(day=1)
-        end = (start + timedelta(days=32)).replace(day=1)
-        print(f"📅 Zeitraum: {start:%Y-%m-%d} bis {end:%Y-%m-%d}\n")
-    else:
-        start = datetime(1970, 1, 1)
-        end = datetime(2100, 1, 1)
+    # Zeitraum bestimmen
+    start = datetime.strptime(month + "-01", "%Y-%m-%d")
+    next_month = start.replace(day=28) + timedelta(days=4)
+    end = next_month.replace(day=1)
+    print(f"📅 Zeitraum: {start:%Y-%m-%d} bis {end:%Y-%m-%d}\n")
 
-    # ---------------- Eingangsbelege ----------------
-    print("📄 Offene Eingangsbelege:\n")
-    # ---------------- Eingangsbelege ----------------
+ 
+
+    # ---------------------------- Eingangsbelege ----------------------------
+    print("\n📄 Offene Eingangsbelege:\n")
+
     cur.execute("""
-        SELECT v.id, v.voucher_number, v.partner_name, v.total_amount,
-            v.voucher_date, v.payment_due_date
-        FROM vouchers v
-        LEFT JOIN voucher_links l ON v.id = l.voucher_id
-        WHERE l.id IS NULL
-        AND COALESCE(v.status, '') NOT IN ('paid', 'cancelled', 'archived')
-        AND v.voucher_date BETWEEN %s AND %s
-        ORDER BY v.voucher_date;
+        SELECT id, voucher_number, partner_name, voucher_date, total_amount, payment_due_date
+        FROM vouchers
+        WHERE status != 'paid'
+        AND voucher_date BETWEEN %s AND %s
+        ORDER BY voucher_date;
     """, (start, end))
 
     rows = cur.fetchall()
+
     if not rows:
         print("  (keine offenen Eingangsbelege)\n")
     else:
-        for vid, num, name, amount, vdate, due in rows:
-            due_str = due.strftime("%Y-%m-%d") if due else "-"
-            print(f"  ID {vid:4d} | {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
+        for row in rows:
+            vid   = row_get(row, "id",            0)
+            num   = row_get(row, "voucher_number",1)
+            name  = row_get(row, "partner_name",  2)
+            vdate = row_get(row, "voucher_date",  3)
+            amt   = row_get(row, "total_amount",  4)
+            due   = row_get(row, "due_date",      5)
 
-    # ---------------- Ausgangsbelege ----------------
+            vdate_str = format_date(vdate)
+            due_str   = format_date(due) if due else "-"
+
+            print(f"  ID {vid:4} | {num or '(kein Nr.)':25s} | {name[:35]:35s} "
+                f"| {vdate_str} | Fälligkeit: {due_str} | {safe_float(amt):8.2f} EUR")
+
+
+    # ---------------------------- Ausgangsbelege ----------------------------
     print("\n📄 Offene Ausgangsbelege:\n")
+
     cur.execute("""
-        SELECT o.id, o.voucher_number, o.customer_name, o.total_amount,
-               o.invoice_date, o.payment_due_date
-          FROM outgoing_vouchers o
-          LEFT JOIN outgoing_links l ON o.id = l.outgoing_id
-         WHERE l.id IS NULL
-           AND (o.status IS NULL OR o.status != 'paid')
-           AND o.invoice_date BETWEEN %s AND %s
-         ORDER BY o.invoice_date;
+        SELECT id, voucher_number, partner_name, voucher_date, total_amount, payment_due_date
+        FROM outgoing_vouchers
+        WHERE status != 'paid'
+        AND voucher_date BETWEEN %s AND %s
+        ORDER BY voucher_date;
     """, (start, end))
 
     rows = cur.fetchall()
+
     if not rows:
         print("  (keine offenen Ausgangsbelege)\n")
     else:
-        for oid, num, name, amount, vdate, due in rows:
-            due_str = due.strftime("%Y-%m-%d") if due else "-"
-            print(f"  ID {oid:4d} | {num or '(kein Nr.)':15s} | {name[:35]:35s} | {vdate:%Y-%m-%d} | Fälligkeit: {due_str} | {amount:8.2f} EUR")
+        for row in rows:
+            vid   = row_get(row, "id",            0)
+            num   = row_get(row, "voucher_number",1)
+            name  = row_get(row, "partner_name",  2)
+            vdate = row_get(row, "voucher_date",  3)
+            amt   = row_get(row, "total_amount",  4)
+            due   = row_get(row, "due_date",      5)
+
+            vdate_str = format_date(vdate)
+            due_str   = format_date(due) if due else "-"
+
+            print(f"  ID {vid:4} | {num or '(kein Nr.)':25s} | {name[:35]:35s} "
+                f"| {vdate_str} | Fälligkeit: {due_str} | {safe_float(amt):8.2f} EUR")
 
     cur.close()
     conn.close()
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Listet offene Belege eines Monats auf.")
-    ap.add_argument("--month", help="YYYY-MM (optional)")
+    import argparse
+    ap = argparse.ArgumentParser(description="Zeigt offene Belege mit Buchungs- und Zahlungsstatus an.")
+    ap.add_argument("--month", required=True, help="Monat im Format YYYY-MM (z. B. 2024-01)")
     args = ap.parse_args()
     report_open_vouchers(args.month)
