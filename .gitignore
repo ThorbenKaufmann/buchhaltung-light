@@ -4,3 +4,4 @@ config/db.yaml
 **/backlog/
 **/belege/
 **/__pycache__/
+*.aux

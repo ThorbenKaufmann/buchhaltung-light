@@ -4,6 +4,18 @@
     {
       "type": "debugpy",
       "request": "launch",
+      "name": "Render tex Invoice.",
+      "program": "${workspaceFolder}/python/invoicing/render_invoice.py",
+      "args": [
+        "${workspaceFolder}/python/invoicing/data/invoice_RE20260002.yaml",
+        "$./templates/invoice.tex.j2",
+        "${workspaceFolder}/python/invoicing/build/invoice_RE20260002.tex"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "debugpy",
+      "request": "launch",
       "name": "Import MT940 File",
       "program": "${workspaceFolder}/python/import_mt940.py",
       "args": [
