@@ -25,7 +25,7 @@ def main(yaml_path, template_path, out_path):
     # Due Date berechnen aus payment.terms_days, oder aus payment.due_days direct nehmen (default terms days!).
 
     issue_date = datetime.strptime(data["invoice"]["issue_date"], "%Y-%m-%d").date()
-    payment_days = int(data.get("payment_terms_days", 14))
+    payment_days = int(data.get("payment", {}).get("terms_days", 14))
 
     if "due_date" in data:
         due_date = datetime.strptime(data["due_date"], "%Y-%m-%d").date()
