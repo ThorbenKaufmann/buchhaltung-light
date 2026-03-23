@@ -1,103 +1,119 @@
 #!/usr/bin/env python3
 """
-report_account_summary.py — Monats-Kontosummenbericht
-Summiert alle booking_lines je Konto für einen Monat:
+report_account_summary.py (NEU)
 
-    Konto → Netto, Steuer, Brutto
+Kontensummen pro Monat basierend auf booking_lines_new + vouchers.
 
-Brutto = Netto + Steuer
+Zeigt:
+    Konto → Summe (Netto)
 """
 
 import argparse
 from datetime import datetime, timedelta
 from db import get_connection
-from bhl_utils import row_get, safe_float
 
 
 def run_account_summary(month):
+    conn = get_connection(dict_cursor=True)
+    cur = conn.cursor()
 
-    # ------------------------------------------------------------------
-    # Zeitraum bestimmen
-    # ------------------------------------------------------------------
+    # Zeitraum
     mdate = datetime.strptime(month, "%Y-%m")
     start = mdate.replace(day=1)
     end = (start + timedelta(days=32)).replace(day=1)
 
-    print(f"📆 Kontensummen {start:%Y-%m-%d} bis {end:%Y-%m-%d}\n")
+    print(f"\n📆 Kontensummen {start:%Y-%m-%d} bis {end:%Y-%m-%d}\n")
 
-    conn = get_connection()
-    cur = conn.cursor()
-
-    # ------------------------------------------------------------------
-    # Buchungslinien abrufen (booking_lines ist die Wahrheit)
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Daten holen
+    # ------------------------------------------------------------
     cur.execute("""
-        SELECT account_skr, net_amount, tax_amount
-          FROM booking_lines
-         WHERE created_at BETWEEN %s AND %s
-         ORDER BY account_skr;
+        SELECT
+            bl.account_skr,
+            a.name,
+            a.is_expense,
+            a.is_revenue,
+            SUM(bl.amount) AS summe
+        FROM booking_lines_new bl
+        JOIN unified_voucher_lines u
+          ON u.id = bl.source_id
+         AND u.type = bl.source_type
+        JOIN skr03_accounts a
+          ON a.id = bl.account_skr
+        WHERE u.voucher_date >= %s
+          AND u.voucher_date < %s
+        GROUP BY bl.account_skr, a.name, a.is_expense, a.is_revenue
+        ORDER BY bl.account_skr;
     """, (start, end))
 
     rows = cur.fetchall()
 
-    # ------------------------------------------------------------------
-    # Summen pro Konto bilden
-    # ------------------------------------------------------------------
-    account_totals = {}  # konto → {'net': x, 'tax': y}
+    if not rows:
+        print("Keine Daten.")
+        return
 
-    for row in rows:
-        account = row_get(row, "account_skr", 0)
-        net     = safe_float(row_get(row, "net_amount", 1))
-        tax     = safe_float(row_get(row, "tax_amount", 2))
+    # ------------------------------------------------------------
+    # Ausgabe Tabelle
+    # ------------------------------------------------------------
+    print("Konto      Bezeichnung                         Summe €    Typ")
+    print("----------------------------------------------------------------")
 
-        if not account:
-            # Sicherheit, darf nicht passieren
-            continue
+    total_revenue = 0.0
+    total_expense = 0.0
+    total_ust = 0.0
+    total_vorsteuer = 0.0
 
-        if account not in account_totals:
-            account_totals[account] = {"net": 0.0, "tax": 0.0}
+    for r in rows:
+        konto = r["account_skr"]
+        name = r["name"]
+        summe = float(r["summe"] or 0)
 
-        account_totals[account]["net"] += net
-        account_totals[account]["tax"] += tax
+        is_rev = r["is_revenue"]
+        is_exp = r["is_expense"]
 
-    # ------------------------------------------------------------------
-    # Ausgabe
-    # ------------------------------------------------------------------
-    print("Konto      Bezeichnung                         Netto €     Steuer €     Brutto €")
-    print("--------------------------------------------------------------------------------")
+        # Typ bestimmen
+        if is_rev:
+            typ = "REV"
+            total_revenue += summe
+        elif is_exp:
+            typ = "EXP"
+            total_expense += summe
+        elif konto.startswith("17"):
+            typ = "USt"
+            total_ust += summe
+        elif konto.startswith("15"):
+            typ = "VSt"
+            total_vorsteuer += summe
+        else:
+            typ = "—"
 
-    # Wenn wir später ein eigenes Konten-Register haben, ergänzen wir die Namen hier.
-    def konto_name(k):
-        return "(SKR03 Konto)"
+        print(f"{konto:<10} {name[:30]:30} {summe:10.2f}    {typ}")
 
-    total_net = 0.0
-    total_tax = 0.0
+    print("----------------------------------------------------------------")
 
-    for konto in sorted(account_totals):
-        net = account_totals[konto]["net"]
-        tax = account_totals[konto]["tax"]
-        brutto = net + tax
+    # ------------------------------------------------------------
+    # GuV
+    # ------------------------------------------------------------
+    print("\n📊 GuV:")
+    print(f"Erlöse:   {total_revenue:10.2f}")
+    print(f"Aufwand:  {total_expense:10.2f}")
+    print(f"Ergebnis: {(total_revenue + total_expense):10.2f}")
 
-        total_net += net
-        total_tax += tax
-
-        print(f"{konto:<10} {konto_name(konto):30s} "
-              f"{net:10.2f} {tax:12.2f} {brutto:12.2f}")
-
-    print("--------------------------------------------------------------------------------")
-    print(f"{'SUMME':<42s} {total_net:10.2f} {total_tax:12.2f} {(total_net + total_tax):12.2f}")
+    # ------------------------------------------------------------
+    # Umsatzsteuer
+    # ------------------------------------------------------------
+    print("\n🧾 Umsatzsteuer:")
+    print(f"USt:        {total_ust:10.2f}")
+    print(f"Vorsteuer:  {total_vorsteuer:10.2f}")
+    print(f"Zahllast:   {(total_ust + total_vorsteuer):10.2f}")
 
     cur.close()
     conn.close()
 
 
-# ----------------------------------------------------------------------
-# CLI
-# ----------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description="Monatliche Summen pro SKR03-Konto.")
-    ap.add_argument("--month", default=datetime.today().strftime("%Y-%m"),
-                    help="Monat im Format YYYY-MM (Standard: aktueller Monat)")
+    ap = argparse.ArgumentParser(description="Kontensummen pro Monat")
+    ap.add_argument("--month", required=True)
     args = ap.parse_args()
 
     run_account_summary(args.month)

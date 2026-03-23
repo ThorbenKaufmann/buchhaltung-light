@@ -1,32 +1,78 @@
 #!/usr/bin/env python3
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db import get_connection
 
 
 def fetch_guv_report(year=None):
-    """
-    Gewinn- und Verlustrechnung pro Monat oder Jahr.
-    """
     conn = get_connection()
-    cur = conn.cursor()      # RealDictCursor kommt automatisch
-
+    cur = conn.cursor()
 
     if year:
         sql = """
             SELECT
-                DATE_TRUNC('month', periode) AS monat,
-                direction,
-                SUM(netto_summe) AS netto_summe,
-                SUM(steuer_summe) AS steuer_summe,
-                SUM(brutto_summe) AS brutto_summe
-            FROM vw_guv_report
-            WHERE DATE_PART('year', periode) = %s
+                DATE_TRUNC('month', u.voucher_date) AS monat,
+
+                CASE
+                    WHEN a.is_revenue THEN 'revenue'
+                    WHEN a.is_expense THEN 'expense'
+                END AS category,
+
+                SUM(
+                    CASE
+                        WHEN a.is_revenue THEN -bl.amount
+                        WHEN a.is_expense THEN  bl.amount
+                        ELSE 0
+                    END
+                ) AS netto_summe
+
+            FROM booking_lines_new bl
+            JOIN unified_voucher_lines u
+              ON u.id = bl.source_id
+             AND u.type = bl.source_type
+
+            JOIN skr03_accounts a ON a.id = bl.account_skr
+
+            WHERE DATE_PART('year', u.voucher_date) = %s
+              AND (a.is_revenue OR a.is_expense)
+              AND a.is_internal = false
+
             GROUP BY 1, 2
             ORDER BY 1, 2;
         """
         cur.execute(sql, (year,))
-
     else:
-        sql = "SELECT * FROM vw_guv_report ORDER BY periode;"
+        sql = """
+            SELECT
+                DATE_TRUNC('month', u.voucher_date) AS monat,
+
+                CASE
+                    WHEN a.is_revenue THEN 'revenue'
+                    WHEN a.is_expense THEN 'expense'
+                END AS category,
+
+                SUM(
+                    CASE
+                        WHEN a.is_revenue THEN -bl.amount
+                        WHEN a.is_expense THEN  bl.amount
+                        ELSE 0
+                    END
+                ) AS netto_summe
+
+            FROM booking_lines_new bl
+            JOIN unified_voucher_lines u
+              ON u.id = bl.source_id
+             AND u.type = bl.source_type
+
+            JOIN skr03_accounts a ON a.id = bl.account_skr
+
+            WHERE (a.is_revenue OR a.is_expense)
+              AND a.is_internal = false
+
+            GROUP BY 1, 2
+            ORDER BY 1, 2;
+        """
         cur.execute(sql)
 
     rows = cur.fetchall()

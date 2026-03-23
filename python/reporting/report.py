@@ -83,6 +83,46 @@ def display(rows):
         return
 
     df = pd.DataFrame(rows)
+
+    # Spaltennamen für GuV setzen (wichtig!)
+    if len(df.columns) == 3:
+        df.columns = ["monat", "category", "netto_summe"]
+    
+    
+
+    # --- GuV Pivot ---
+    if all(col in df.columns for col in ["monat", "category", "netto_summe"]):
+        try:
+            # WICHTIG: numerisch rechnen!
+            df_num = df.copy()
+
+            def to_float(x):
+                if isinstance(x, str):
+                    return float(x.replace(".", "").replace(",", "."))
+                return float(x)
+
+            df_num["netto_summe"] = df_num["netto_summe"].apply(to_float)
+
+            df_pivot = df_num.pivot(index="monat", columns="category", values="netto_summe").fillna(0)
+
+            df_pivot["result"] = df_pivot.get("revenue", 0) - df_pivot.get("expense", 0)
+
+            print("\n### GuV Monatsübersicht\n")
+
+            # Formatierung erst hier!
+            df_pivot_fmt = df_pivot.copy()
+            df_pivot_fmt = fmt(df_pivot_fmt.reset_index())
+
+            print(tabulate.tabulate(df_pivot_fmt, headers="keys", tablefmt="github", showindex=False))
+            print("\n--- Detail ---\n")
+
+        except Exception as e:
+            print(f"Pivot Fehler: {e}")
+
+    
+    df_pivot["result"] = df_pivot.get("revenue", 0) - df_pivot.get("expense", 0)
+    print(df_pivot)
+
     df = fmt(df)
 
     # --- Summenzeile (für numerische Spalten) ---
@@ -122,10 +162,16 @@ def yearly_summary(year: int):
     guv_rows = guv.fetch_guv_report(year=year)
 
     ust_sum = sum(float(r.get("zahlbetrag", 0)) for r in ust_rows)
-    guv_ertrag = sum(float(r.get("netto_summe", 0))
-                     for r in guv_rows if r.get("direction") == "outgoing")
-    guv_aufwand = sum(float(r.get("netto_summe", 0))
-                      for r in guv_rows if r.get("direction") == "incoming")
+    guv_ertrag = sum(
+        float(r.get("netto_summe", 0))
+        for r in guv_rows if r.get("category") == "revenue"
+    )
+
+    guv_aufwand = sum(
+        float(r.get("netto_summe", 0))
+        for r in guv_rows if r.get("category") == "expense"
+    )
+        
     guv_ergebnis = guv_ertrag - guv_aufwand
 
     data = [{
