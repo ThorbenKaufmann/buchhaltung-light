@@ -1,0 +1,83 @@
+% Beispiel-Brief
+% übersetzt mit lualatex
+
+\documentclass[%
+business,
+DIV=10,
+fontsize=10pt,
+parskip=full-,%Absatzabstand eine Zeile
+	twoside,%zweiseitig
+pagenumber=botright,%Seitenzahl rechts im Fuß
+enlargefirstpage]{scrlttr2}
+%\LoadLetterOption{business}
+%\LoadLetterOption{setcompany}%company1 erscheint als Name bei Rücksendeadresse
+
+\usepackage[ngerman]{babel}
+\usepackage{ragged2e}%für Rausatz mit \RaggedRight
+\usepackage{blindtext,mwe}%für Demo
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\setmainfont{Roboto}
+
+\usepackage[table]{xcolor}
+
+%definieren von \grqq und \glqq ( „ bzw. “)
+\renewcommand*{\glqq}{\quotedblbase}
+\renewcommand*{\grqq}{\textquotedblleft}
+
+\setkomavar{date}{ << quote.issue_date >> }
+\setkomavar{myref}{ << quote.number >> }
+\setkomavar{yourref}{ << quote.po_number>> }
+\setkomavar{customer}{ << buyer.customer_number >> }
+\setkomavar{subject}{Quote << quote.number >> }
+
+\begin{document}
+	%\RaggedRight %Rausatz? Sonst Blocksatz!
+	\begin{letter}{ << buyer.name >> \\ 
+			- << buyer.contact.person_name >> - \\ 
+			<< buyer.street >> \\ 
+			<< buyer.zip >> << buyer.city >> <% if buyer.state %>, << buyer.state >> <% endif %> \\
+            <% if buyer.country %><< buyer.country >><% endif %>
+        }
+		
+		\opening{Dear Sir or Madam,}
+		
+		We hereby offer you the following services:
+        
+        \begingroup
+            \small
+            \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}
+                \hline
+                \rowcolor{gray!15}
+                \textbf{Pos.} & \textbf{ID} & \textbf{Description} & \textbf{Price} & \textbf{Unit} & \textbf{Cnt.} & \textbf{Tax} & \textbf{Netto} \\
+                \hline
+                <% for line in lines %>
+                << loop.index >> & << line.assigned_id >> & << line.name >> \par \scriptsize \textit{ << line.description >> } & << line.unit_price >> & << line.unit_code >> & << line.quantity >> & << line.tax.rate >> & << line.quantity * line.unit_price >> \\
+                \hline
+                <% endfor %>
+            \end{tabular}
+
+            \vspace{0.5em}
+
+            \begin{tabular}{p{9cm} p{4cm} r}
+            &    \textbf{Zwischensumme (netto)} & << net_total >>\,€ \\
+            &    Umsatzsteuer (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
+            &    \textbf{Gesamtbetrag} & \textbf{<< gross_total >>\,€} \\
+            \end{tabular}
+        
+        \endgroup
+
+        Payable within << payment.terms_days >> days of invoice date without deductions.
+        <% if payment.discount %>
+        Discount: << payment.discount.percent >>\% within << payment.discount.days >> days of invoice date.
+        <% endif %>
+        <% if tax.category == "AE" %>
+        Reverse charge - VAT to be accounted for by the recipient (tax liability of the recipient of the service: §13b UStG).
+        <% endif %>
+        We hope you like our offer and would be delighted to receive an order from you.
+        Thank you in advance for your cooperation.
+		\closing{Kind Regards}
+		
+	\end{letter}
+
+\end{document}

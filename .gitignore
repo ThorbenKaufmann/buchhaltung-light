@@ -5,3 +5,7 @@ config/db.yaml
 **/belege/
 **/__pycache__/
 *.aux
+**/invoicing/build
+**/invoicing/data
+**/invoicing/*.pdf
+**/invoicing/*.log

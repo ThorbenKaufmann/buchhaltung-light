@@ -1,0 +1,84 @@
+% Beispiel-Brief
+% übersetzt mit lualatex
+
+\documentclass[%
+business,
+DIV=10,
+fontsize=10pt,
+parskip=full-,%Absatzabstand eine Zeile
+	twoside,%zweiseitig
+pagenumber=botright,%Seitenzahl rechts im Fuß
+enlargefirstpage]{scrlttr2}
+%\LoadLetterOption{business}
+%\LoadLetterOption{setcompany}%company1 erscheint als Name bei Rücksendeadresse
+
+%\usepackage[ngerman]{babel}
+\usepackage[english]{babel}
+\usepackage{ragged2e}%für Rausatz mit \RaggedRight
+\usepackage{blindtext,mwe}%für Demo
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\setmainfont{Roboto}
+
+\usepackage[table]{xcolor}
+
+%definieren von \grqq und \glqq ( „ bzw. “)
+\renewcommand*{\glqq}{\quotedblbase}
+\renewcommand*{\grqq}{\textquotedblleft}
+
+\setkomavar{date}{ << invoice.issue_date >> }
+\setkomavar{myref}{ << invoice.number >> }
+\setkomavar{yourref}{ << invoice.po_number>> }
+\setkomavar{customer}{ << buyer.customer_number >> }
+\setkomavar{subject}{Invoice << invoice.number >> }
+
+\begin{document}
+	%\RaggedRight %Rausatz? Sonst Blocksatz!
+	\begin{letter}{ << buyer.name >> \\ 
+			- << buyer.contact.person_name >> - \\ 
+			<< buyer.street >> \\ 
+			<< buyer.zip >> << buyer.city >> <% if buyer.state %>, << buyer.state >> <% endif %> \\
+            <% if buyer.country %><< buyer.country >><% endif %>
+        }
+		
+		\opening{Dear Sir or Madam,}
+		
+		According to your purchase order << invoice.po_number>>, we invoice the following services:
+        
+        \begingroup
+            \small
+            \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}
+                \hline
+                \rowcolor{gray!15}
+                \textbf{Pos.} & \textbf{ID} & \textbf{Description} & \textbf{Price} & \textbf{Unit} & \textbf{Cnt.} & \textbf{Tax} & \textbf{Netto} \\
+                \hline
+                <% for line in lines %>
+                << loop.index >> & << line.assigned_id >> & << line.name >> \par \scriptsize \textit{ << line.description >> } & << line.unit_price >> & << line.unit_code >> & << line.quantity >> & << line.tax.rate >> & << line.quantity * line.unit_price >> \\
+                \hline
+                <% endfor %>
+            \end{tabular}
+
+            \vspace{0.5em}
+
+            \begin{tabular}{p{9cm} p{4cm} r}
+            &    \textbf{Subtotal (net)} & << net_total >>\,€ \\
+            &    sales tax (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
+            &    \textbf{total amount} & \textbf{<< gross_total >>\,€} \\
+            \end{tabular}
+        
+        \endgroup
+
+        Payable within << payment.terms_days >> days of invoice date without deductions.
+        <% if payment.discount %>
+        Discount: << payment.discount.percent >>\% within << payment.discount.days >> days of invoice date.
+        <% endif %>
+        <% if tax.category == "AE" %>
+        Reverse charge - VAT to be accounted for by the recipient. \\ Directive 2006/112/EC Art. 44 and 196. \\
+        \textbf{Customer VAT ID: << buyer.vat_id >>}
+        <% endif %>
+        Thank you for your cooperation.
+		\closing{Kind Regards}
+		
+	\end{letter}
+
+\end{document}

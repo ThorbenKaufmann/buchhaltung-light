@@ -23,9 +23,10 @@ def safe_float(value):
         return 0.0
 
 def report_missing_receipts(month: str, non_private: bool, non_internal: bool, export: str | None):
-
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
+    #conn = get_connection()
+    #cur = conn.cursor()
 
     # Zeitraum bestimmen
     mdate = datetime.strptime(month, "%Y-%m")

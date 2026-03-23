@@ -5,18 +5,15 @@ Erzeugt eine zusammenfassende Steuerübersicht (USt / Vorsteuer) für einen Zeit
 
 Funktioniert sowohl mit booking_lines als auch mit vouchers/outgoing_vouchers.
 """
+#!/usr/bin/env python3
 
-import sys
 import argparse
 from datetime import datetime, timedelta
+from decimal import Decimal
 from db import get_connection
-
-def safe_sum(rows, direction):
-    return sum((r[3] or 0) for r in rows if r[1] == direction)
 
 
 def parse_month(month_str: str):
-    """Wandelt 'YYYY-MM' in Monatsanfang und Monatsende um."""
     start = datetime.strptime(month_str, "%Y-%m")
     end = (start + timedelta(days=32)).replace(day=1)
     return start.date(), end.date()
@@ -29,84 +26,64 @@ def run_tax_summary(month: str):
 
     print(f"📆 Steuer-Summen {start_date} bis {end_date}")
     print()
-    print(f"{'Typ':<15} {'Richtung':<15} {'Netto €':>12} {'Steuer €':>12} {'#':>4}")
-    print("-" * 64)
 
-    # 1️⃣ Versuch: booking_lines (bestehende Buchungen)
+    # --- Vorsteuer ---
     cur.execute("""
-        SELECT tax_type, direction,
-               ROUND(SUM(net_amount)::numeric, 2) AS net_sum,
-               ROUND(SUM(tax_amount)::numeric, 2) AS tax_sum,
-               COUNT(*) AS cnt
-        FROM booking_lines
-        WHERE created_at >= %s AND created_at < %s
-        GROUP BY tax_type, direction
-        ORDER BY direction, tax_type;
+        SELECT COALESCE(SUM(bl.amount), 0)
+        FROM booking_lines_new bl
+        JOIN voucher_lines vl ON bl.source_type = 'incoming' AND bl.source_id = vl.id
+        JOIN vouchers v ON vl.voucher_id = v.id
+        WHERE bl.account_skr = '1576'
+          AND v.voucher_date >= %s
+          AND v.voucher_date < %s
     """, (start_date, end_date))
-    rows = cur.fetchall()
 
-    # 2️⃣ Fallback: vouchers + outgoing_vouchers
-    if not rows:
-        cur.execute("""
-            SELECT 'vorsteuer19' AS tax_type,
-                   'incoming' AS direction,
-                   ROUND(SUM(CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END / 1.19)::numeric, 2) AS net_sum,
-                   ROUND(SUM(CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END - (CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END / 1.19))::numeric, 2) AS tax_sum,
-                   COUNT(*) AS cnt
-            FROM vouchers
-            WHERE voucher_date >= %s AND voucher_date < %s
-            UNION ALL
-            SELECT 'ust19' AS tax_type,
-                   'outgoing' AS direction,
-                   ROUND(SUM(CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END / 1.19)::numeric, 2) AS net_sum,
-                   ROUND(SUM(CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END - (CASE WHEN document_type='credit_note' THEN -total_amount ELSE total_amount END / 1.19))::numeric, 2) AS tax_sum,
-                   COUNT(*) AS cnt
-            FROM outgoing_vouchers
-            WHERE voucher_date >= %s AND voucher_date < %s
-            ORDER BY direction;
-        """, (start_date, end_date, start_date, end_date))
-        rows = cur.fetchall()
+    vorsteuer = Decimal(cur.fetchone()[0] or 0)
 
-    total_net = total_tax = total_count = 0
-    for tax_type, direction, net_sum, tax_sum, cnt in rows:
-        net_sum = net_sum or 0
-        tax_sum = tax_sum or 0
-        total_net += net_sum
-        total_tax += tax_sum
-        total_count += cnt
-        print(f"{tax_type:<15} {direction:<15} {net_sum:>12.2f} {tax_sum:>12.2f} {cnt:>4}")
+    # --- Umsatzsteuer ---
+    cur.execute("""
+        SELECT COALESCE(SUM(bl.amount), 0)
+        FROM booking_lines_new bl
+        JOIN outgoing_lines ol ON bl.source_type = 'outgoing' AND bl.source_id = ol.id
+        JOIN outgoing_vouchers ov ON ol.outgoing_id = ov.id
+        WHERE bl.account_skr = '1776'
+          AND ov.voucher_date >= %s
+          AND ov.voucher_date < %s
+    """, (start_date, end_date))
 
-    print("-" * 64)
-    print(f"{'Gesamt':<30} {total_net:>12.2f} {total_tax:>12.2f} {total_count:>4}")
+    ust_raw = Decimal(cur.fetchone()[0] or 0)
 
+    # Achtung: USt ist negativ gebucht → drehen
+    umsatzsteuer = -ust_raw
 
-    #ust_sum = sum(r[3] for r in rows if r[1] == "outgoing")
-    #vor_sum = sum(r[3] for r in rows if r[1] == "incoming")
+    # --- Ausgabe ---
+    print(f"{'Typ':<20} {'Betrag €':>12}")
+    print("-" * 34)
+    print(f"{'Vorsteuer (1576)':<20} {vorsteuer:>12.2f}")
+    print(f"{'Umsatzsteuer (1776)':<20} {umsatzsteuer:>12.2f}")
+    print("-" * 34)
 
-    ust_sum = safe_sum(rows, "outgoing")
-    vor_sum = safe_sum(rows, "incoming")
+    zahllast = umsatzsteuer - vorsteuer
 
-    zahllast = ust_sum - vor_sum
-    print(f"\nUSt-Zahllast (Umsatzsteuer - Vorsteuer): {zahllast:>10.2f} €")
+    print(f"{'Zahllast':<20} {zahllast:>12.2f}")
+    print()
+
     if zahllast < 0:
         print("➡️  Erstattung durch Finanzamt erwartet.")
     else:
         print("➡️  Zahllast an Finanzamt zu entrichten.")
-
 
     cur.close()
     conn.close()
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Erzeugt eine Steuer-Summenübersicht (USt / Vorsteuer) für einen Monat."
-    )
+    ap = argparse.ArgumentParser(description="Steuerübersicht basierend auf booking_lines_new")
     ap.add_argument(
         "--month",
         required=False,
         default=datetime.today().strftime("%Y-%m"),
-        help="Monat im Format YYYY-MM (Standard: aktueller Monat)",
+        help="Monat im Format YYYY-MM",
     )
     args = ap.parse_args()
 

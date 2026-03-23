@@ -47,7 +47,7 @@ def main(yaml_path, template_path, out_path):
 
     # Due Date berechnen aus payment.terms_days, oder aus payment.due_days direct nehmen (default terms days!).
 
-    issue_date = datetime.strptime(data["invoice"]["issue_date"], "%Y-%m-%d").date()
+    issue_date = datetime.strptime(data["quote"]["issue_date"], "%Y-%m-%d").date()
     payment_days = int(data.get("payment", {}).get("terms_days", 14))
 
     vat_rate_percent = int(data.get("tax", {}).get("rate", 19))
@@ -163,7 +163,7 @@ def main(yaml_path, template_path, out_path):
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("usage: render_invoice.py invoice.yaml template.tex.j2 output.tex")
+        print("usage: render_quote.py quote.yaml template.tex.j2 output.tex")
         sys.exit(1)
 
     main(sys.argv[1], sys.argv[2], sys.argv[3])

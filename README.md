@@ -1,5 +1,10 @@
 # Buchhaltung-Light (BHL)
 
+### Bugs
+* report_account_summary liefert immer LEER?
+
+### Purpose
+
 **Ziel:**  
 Eine vollständig nachvollziehbare, GoBD-konforme und quelloffene Buchhaltungs-Engine – lokal, ohne Cloud, ohne Abo.
 
@@ -87,8 +92,6 @@ Beide kombiniert:
 python3 python/assign_accounts.py --direction incoming --month 2024-01 --show-pdf --auto
 
 
-
-
 python3 python/set_receipt_status.py voucher 97 complete
 python3 python/set_receipt_status.py booking 233 missing
 
@@ -156,7 +159,7 @@ options:
 Hier die wichtigsten aus der Norm (UN/CEFACT 2005-Invoice-TypeCodes):
 
 Code	Bedeutung	Übersetzung / Praxisname
-380	Commercial Invoice	normale Rechnung
+380	Commercial Invoice normale Rechnung
 381	Credit Note	Gutschrift / Storno
 382	Debit Note	Belastungsanzeige
 383	Consolidated Invoice	Sammelrechnung
