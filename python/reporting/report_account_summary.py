@@ -10,6 +10,9 @@ Zeigt:
 
 import argparse
 from datetime import datetime, timedelta
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db import get_connection
 
 

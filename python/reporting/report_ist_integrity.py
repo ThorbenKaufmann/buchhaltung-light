@@ -14,6 +14,9 @@ KEINE Nutzung von booking_lines mehr!
 import argparse
 from datetime import datetime, timedelta
 from decimal import Decimal
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db import get_connection
 
 
