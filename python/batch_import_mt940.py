@@ -25,7 +25,7 @@ def batch_import_mt940(import_dir: str, account_id: int):
     # Dateien auflisten
     files = sorted(
         f for f in os.listdir(import_dir)
-        if f.lower().endswith(".mta") and os.path.isfile(os.path.join(import_dir, f))
+        if f.lower().endswith(".mt940") and os.path.isfile(os.path.join(import_dir, f))
     )
 
     if not files:

@@ -67,14 +67,14 @@ def get_account_info(cur, account_id):
 def list_accounts(cur):
     """Zeigt gängige Konten an (nur Auszug, zur Orientierung)."""
     cur.execute("""
-        SELECT id, name, tax_rate
+        SELECT id, name, default_tax
           FROM skr03_accounts
          ORDER BY id
          LIMIT 15;
     """)
     print("  Verfügbare Konten (Auszug):")
-    for acc_id, name, tax_rate in cur.fetchall():
-        print(f"     {acc_id:6} | {name:40s} | {tax_rate:.2f}%")
+    for acc_id, name, default_tax in cur.fetchall():
+        print(f"     {acc_id:6} | {name:40s} | {default_tax:.2f}%")
 
 
 def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
@@ -95,7 +95,7 @@ def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
          WHERE {vtable}.status != 'cancelled'
            AND {vtable}.voucher_date BETWEEN %s AND %s
            AND id NOT IN (
-               SELECT {id_field} FROM booking_lines WHERE {id_field} IS NOT NULL
+               SELECT {id_field} FROM booking_lines_legacy WHERE {id_field} IS NOT NULL
            )
          ORDER BY voucher_date;
     """, (start, end))
@@ -128,6 +128,9 @@ def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
             print(f"  ⚙  Regel gefunden: Konto {account} ({note or 'keine Notiz'}) | {tax_rate:.2f}%")
         else:
             print("  ⚙  Keine Regel gefunden.")
+            if auto:
+                print("  ➜ übersprungen (--auto Modus).\n")
+                continue
             list_accounts(cur)
             account = input("  Konto (SKR03): ").strip()
             if not account:
@@ -143,7 +146,7 @@ def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
         tax_type = determine_tax_type(direction, tax_rate, note)
 
         cur.execute("""
-            INSERT INTO booking_lines
+            INSERT INTO booking_lines_legacy
                 (direction, {id_field}, account_skr, description,
                  net_amount, tax_rate, tax_amount, gross_amount,
                  receipt_status, created_at, tax_type)

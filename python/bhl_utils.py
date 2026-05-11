@@ -120,3 +120,25 @@ def unwrap_text(row, key, idx=None):
     """
     val = row_get(row, key, idx)
     return str(val) if val is not None else ""
+
+
+# -----------------------------
+#  psycopg2 SQL-Hilfsfunktionen
+# -----------------------------
+def sql_escape(text: str) -> str:
+    """
+    Escaped % → %% für psycopg2-SQL-Strings mit eingebetteten Literalen.
+
+    Hintergrund: psycopg2 interpretiert jedes % im SQL-String als Platzhalter-Anfang.
+    %% wird zu % umgewandelt — aber NUR wenn cur.execute(sql, params) mit einem
+    params-Tupel aufgerufen wird (auch leeres Tupel () reicht).
+
+    Bevorzuge generell parameterisierte Queries:
+        cur.execute("... = %s", (desc,))          # immer richtig
+
+    Diese Funktion für Fälle wo das Literal im SQL stehen muss (z.B. LIKE-Muster):
+        cur.execute(f"... ILIKE '{sql_escape(pattern)}%'", ())
+    """
+    if text is None:
+        return ""
+    return text.replace("%", "%%")

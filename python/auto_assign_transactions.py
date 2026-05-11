@@ -114,7 +114,6 @@ def auto_assign(month, dry_run=False):
               f"→ Konto {account} ({rule['note'] or ''}) | {tax_type} | {receipt_status} "
               f"{' '.join(['['+f+']' for f in flags])}")
 
-         # Flags auf Transaktionsebene aktualisieren
         if not dry_run:
             cur.execute("""
                 UPDATE transactions
@@ -123,19 +122,6 @@ def auto_assign(month, dry_run=False):
                        is_cyclic   = %s
                  WHERE id = %s;
             """, (rule["is_internal"], rule["is_private"], rule["is_cyclic"], tid))
-
-        # Ausgabe (nur Information)
-        flags = []
-        if rule["is_internal"]:
-            flags.append("INTERNAL")
-        if rule["is_private"]:
-            flags.append("PRIVATE")
-        if rule["is_cyclic"]:
-            flags.append("CYCLIC")
-
-        print(f"💡 {date} | {name[:35] if name else ''} | {gross:.2f} € "
-              f"→ Konto {account} ({rule['note'] or ''}) | {tax_type} | {receipt_status} "
-              f"{' '.join(['['+f+']' for f in flags])}")
 
         # ⚠️ Kein booking_lines-Insert mehr hier!
         assigned += 1

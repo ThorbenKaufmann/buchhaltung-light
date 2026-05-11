@@ -1,8 +1,5 @@
 # Buchhaltung-Light (BHL)
 
-### Bugs
-* report_account_summary liefert immer LEER?
-
 ### Purpose
 
 **Ziel:**  
