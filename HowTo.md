@@ -75,3 +75,16 @@
 ```bash
 ./report_tax_summary.py --month 2024-09
 ```
+
+## Liste fehlender Belege
+### Alle offenen Positionen ≥ 50€
+python3 python/reporting/report_belegbeschaffung.py --year 2024 --min-amount 50
+
+### Mit Transaktions-IDs (für direkte DB-Arbeit)
+python3 python/reporting/report_belegbeschaffung.py --year 2024 --show-ids
+
+### Alle Positionen ohne Filter
+python3 python/reporting/report_belegbeschaffung.py --year 2024
+
+### Nächstes Jahr direkt einsetzbar
+python3 python/reporting/report_belegbeschaffung.py --year 2025
