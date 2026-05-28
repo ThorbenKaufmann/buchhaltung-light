@@ -1,0 +1,207 @@
+%\begin{filecontents}{business.lco}
+%\ProvidesFile{business.lco}[2016/04/01 lco]
+%
+% Copy this file to business.lco and fill in your own data.
+% business.lco is gitignored and must not be committed (contains IBAN etc.).
+
+
+\usepackage{graphicx}
+\usepackage{fontawesome5}
+\usepackage{lastpage}
+
+\renewcommand*{\raggedsignature}{\raggedright}%Ausrichtung der Signatur links
+
+%\ifkomavarempty{yourref}{%
+% yourref is unset, do this
+	\setplength{toaddrhpos}{25mm}%linker Rand
+	\setplength{toaddrvpos}{60mm}%Abstand Anschriftfeld von oben
+	\addtoplength{toaddrvpos}{-\baselineskip}%
+	\setplength{refhpos}{160mm}%Abstand Geschäftszeile von links
+	\setplength{refvpos}{100mm}%Abstand Geschäftszeile von oben
+	\addtoplength{refvpos}{-\baselineskip}%
+	\setplength{refaftervskip}{-\baselineskip}%Abstand nach Geschäftszeile
+	\setplength{refwidth}{50mm}%Breite der Geschäftszeile
+	\KOMAoption{refline}{dateleft}%Datum links in der Geschäftszeile
+	\KOMAoption{subject}{left}%Betreff linksbündig
+	\setplength{foldmarkthickness}{0.4pt}%Faltmarkendicke
+	\setkomafont{placeanddate}{\bfseries}%Ort u. Datum fett
+%}{%
+% yourref is set, do that
+	\setplength{toaddrhpos}{25mm}%linker Rand
+	\setplength{toaddrvpos}{60mm}%Abstand Anschriftfeld von oben
+	\addtoplength{toaddrvpos}{-\baselineskip}%
+	\setplength{refhpos}{25mm}%Abstand Geschäftszeile von links
+	\setplength{refvpos}{100mm}%Abstand Geschäftszeile von oben
+	\addtoplength{refvpos}{-\baselineskip} %
+	\setplength{refaftervskip}{11mm} % {-\baselineskip} %Abstand nach Geschäftszeile
+	\setplength{refwidth}{160mm}%Breite der Geschäftszeile
+	\KOMAoption{refline}{dateleft}%Datum links in der Geschäftszeile
+	\KOMAoption{subject}{left}%Betreff linksbündig
+	\setplength{foldmarkthickness}{0.4pt}%Faltmarkendicke
+	\setkomafont{placeanddate}{\bfseries}%Ort u. Datum fett
+%}
+
+\setlength{\oddsidemargin}{\useplength{toaddrhpos}}%Satzspiegel nach links
+\addtolength{\oddsidemargin}{-1in}%
+\AfterCalculatingTypearea{%
+	\setlength{\oddsidemargin}{\useplength{toaddrhpos}}%
+	\addtolength{\oddsidemargin}{-1in}%
+}%
+\activateareas
+\setplength{firstheadvpos}{15mm}%Kopf, Abstand von oben
+\setplength{firstheadwidth}{\paperwidth}%Kopf, Breite
+\setplength{firstfootvpos}{275mm}%Fuß, Abstand von oben
+\addtoplength{firstfootvpos}{-\baselineskip}%
+
+\setkomavar*{fromphone}{\faPhone\hspace{2.9pt}}%"Telefon" durch "Tel." ersetzen
+\setkomavar*{frommobilephone}{\faMobile\hspace{3.2pt} }%"Mobiltelefon" durch "Handy" ersetzen
+\setkomavar*{fromfax}{\faFax\hspace{2.8pt}}%"Mobiltelefon" durch "Handy" ersetzen
+\newkomavar{fromlogo1}%
+\newkomavar{company}%
+\newkomavar{company1}%
+\newkomavar{fromfunction}%
+\newkomavar{footaddress}%
+\newkomavar{footphone}%
+\newkomavar{footfax}%
+\newkomavar{facebook}%
+\newkomavar{youtube}%
+\newkomavar{twitter}%
+%\setkomavar{signature}{\usekomavar{fromname}\\(\usekomavar{fromfunction})}%Unterschrift um Funktionsbezeichnung ergänzen
+\setkomavar{signature}{\usekomavar{fromname}}%Unterschrift um Funktionsbezeichnung ergänzen
+
+%Briefkopf
+\newplength{infocolwidth}%
+\setplength{infocolwidth}{50mm}%Breite Infospalte
+\setkomavar{firsthead}{%
+	\fontsize{8}{10}\selectfont
+	\hspace*{\fill}%
+	\usekomavar{fromlogo}%
+	\hspace*{\fill}%
+	\vspace{13.8mm}%
+	\vspace{-\baselineskip}%
+	\\%
+	\hspace*{\useplength{toaddrhpos}}%
+	\textbf{Your Company Name}%
+	\\%
+	%\hspace*{\useplength{toaddrhpos}}%
+	%\textit{\usekomavar{company}}%
+	\hspace*{\fill}%
+	\begin{picture}(0,0)%
+		\put(0,0){\parbox[t]{\useplength{infocolwidth}}{%
+				%\fontsize{8}{11}\color{blue}\sffamily
+				\fontsize{8}{11}\sffamily
+				\raggedright
+				\vspace{\useplength{backaddrheight}}%
+				\usekomavar{fromname}\\
+				\usekomavar{fromfunction}
+				\Ifkomavarempty{company1}{}{%
+					\\
+					\usekomavar{company1}%
+				}\\[\baselineskip]
+				\Ifkomavarempty{fromphone}{}{%
+					\usekomavar*{fromphone}\usekomavar{fromphone}
+					\\%
+				}%
+				\Ifkomavarempty{fromfax}{}{%
+					\usekomavar*{fromfax}\usekomavar{fromfax}
+					\\%
+				}%
+				\Ifkomavarempty{frommobilephone}{}{%
+					\usekomavar*{frommobilephone}\usekomavar{frommobilephone}
+					\\%
+				}%
+				\Ifkomavarempty{fromemail}{}{%
+					\usekomavar{fromemail}
+					\\%
+				}%
+			}%
+		}%
+	\end{picture}%
+	\hspace*{\useplength{infocolwidth}}%
+}%
+
+%Briefkopf Folgeseiten
+\setkomavar{nexthead}{%
+	\fontsize{8}{10}\selectfont
+	\parbox[c]{0.5\textwidth}{%
+		\textbf{Your Company Name}%
+		\\%
+		%\textit{\usekomavar{company}}%
+	}%
+	\parbox[c]{0.5\textwidth}{%
+		\hspace{\fill}%
+		\usekomavar{fromlogo1}%
+	}%
+}%
+\pagestyle{headings}%
+
+%Brieffuß
+\setplength{firstfoothpos}{\useplength{toaddrhpos}}%
+\setkomavar{firstfoot}{\fontsize{8}{9}\sffamily%
+	\parbox[t]{\textwidth}{%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar{footaddress}\\USt.Id. DEXXXXXXXXX
+		\end{tabular}%
+		\hfill%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar*{fromphone}\usekomavar{footphone}\\\usekomavar*{fromfax}\usekomavar{footfax}\\
+			\usekomavar{fromemail}\\
+			\usekomavar{fromurl}
+		\end{tabular}%
+		\hfill%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar{frombank}
+		\end{tabular}%
+		\hfill%
+	}%
+}
+
+\setkomavar{nextfoot}{\fontsize{8}{9}\sffamily%
+	\parbox[t]{\textwidth}{%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar{footaddress}
+		\end{tabular}%
+		\hfill%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar*{fromphone}\usekomavar{footphone}\\\usekomavar*{fromfax}\usekomavar{footfax}\\
+			\usekomavar{fromemail}\\
+			\usekomavar{fromurl}\\\\\\\hspace{40pt}\thepage/\pageref{LastPage}
+		\end{tabular}%
+		\hfill%
+		\begin{tabular}[t]{@{}l}%
+			\usekomavar{frombank}
+		\end{tabular}%
+		\hfill%
+	}%
+}
+
+
+\setkomavar{company}{Your Company Name}
+\setkomavar{company1}{Your Company Name}
+
+\setkomavar{fromlogo}{\includegraphics[width=15mm]{banner.png}}%für erste Seite
+\setkomavar{fromlogo1}{\includegraphics[width=7mm]{banner.png}}%für Folgeseiten
+\setkomavar{fromname}{Max Mustermann}
+\setkomavar{fromfunction}{(Inhaber)}
+\setkomavar{fromaddress}{Musterstraße 1\\12345 Musterstadt}
+\setkomavar{fromphone}{+49-xxxx-xxxxxx-xx}
+\setkomavar{fromfax}{+49-xxxx-xxxxxx-xx}
+\setkomavar{frommobilephone}{+49-xxx-xxxxxxxx}
+\setkomavar{fromemail}{\faPaperPlane\hspace{2.8pt}info@example.de}
+\setkomavar{fromurl}{http://example.de}
+\setkomavar{frombank}{Musterbank\\IBAN DE00 0000 0000 0000 0000 00\\BIC GENODEXXXXX}
+
+\KOMAoptions{%
+fromrule=afteraddress, 	% Trennlinie unter dem Briefkopf
+footsepline=true,		% Insert a separator line above the footer.
+headsepline=true,
+}
+%für Fußzeile
+\setkomavar{footaddress}{Your Company Name\\
+Musterstraße 1\\
+12345 Musterstadt}
+\setkomavar{footphone}{+49-xxxx-xxxxxx-xx}
+\setkomavar{footfax}{+49-xxxx-xxxxxx-xx}
+
+
+%\end{filecontents}
