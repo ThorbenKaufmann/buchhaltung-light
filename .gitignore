@@ -1,4 +1,5 @@
 config/db.yaml
+config/latex/lco/business.lco
 **/venv/
 **/secret/
 **/backlog/
@@ -9,3 +10,9 @@ config/db.yaml
 **/invoicing/data
 **/invoicing/*.pdf
 **/invoicing/*.log
+report_transaction_overview_*.csv
+report_transaction_overview_*.xlsx
+schema_backup.sql
+Suchliste.txt
+unlinked.txt
+removed/
