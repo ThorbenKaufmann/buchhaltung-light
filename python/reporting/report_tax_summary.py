@@ -30,31 +30,29 @@ def run_tax_summary(month: str):
     print(f"📆 Steuer-Summen {start_date} bis {end_date}")
     print()
 
-    # --- Vorsteuer (aus Eingangsbelegen) ---
+    # --- Vorsteuer (Konto 1576, aus Eingangsbelegen) ---
     cur.execute("""
-        SELECT COALESCE(SUM(bl.tax_amount), 0)
-        FROM booking_lines_legacy bl
-        JOIN vouchers v ON bl.voucher_id = v.id
-        WHERE bl.direction = 'incoming'
-          AND bl.tax_amount > 0
-          AND v.voucher_date >= %s
-          AND v.voucher_date < %s
+        SELECT COALESCE(SUM(bl.amount), 0)
+        FROM booking_lines_new bl
+        JOIN unified_voucher_lines u ON u.id = bl.source_id AND u.type = bl.source_type
+        WHERE bl.account_skr = '1576'
+          AND u.voucher_date >= %s
+          AND u.voucher_date < %s
     """, (start_date, end_date))
 
     vorsteuer = Decimal(cur.fetchone()[0] or 0)
 
-    # --- Umsatzsteuer (aus Ausgangsbelegen) ---
+    # --- Umsatzsteuer (Konto 1776, aus Ausgangsbelegen; negativ gebucht → drehen) ---
     cur.execute("""
-        SELECT COALESCE(SUM(bl.tax_amount), 0)
-        FROM booking_lines_legacy bl
-        JOIN outgoing_vouchers ov ON bl.outgoing_id = ov.id
-        WHERE bl.direction = 'outgoing'
-          AND bl.tax_amount > 0
-          AND ov.voucher_date >= %s
-          AND ov.voucher_date < %s
+        SELECT COALESCE(SUM(bl.amount), 0)
+        FROM booking_lines_new bl
+        JOIN unified_voucher_lines u ON u.id = bl.source_id AND u.type = bl.source_type
+        WHERE bl.account_skr = '1776'
+          AND u.voucher_date >= %s
+          AND u.voucher_date < %s
     """, (start_date, end_date))
 
-    umsatzsteuer = Decimal(cur.fetchone()[0] or 0)
+    umsatzsteuer = -Decimal(cur.fetchone()[0] or 0)
 
     # --- Ausgabe ---
     print(f"{'Typ':<20} {'Betrag €':>12}")
