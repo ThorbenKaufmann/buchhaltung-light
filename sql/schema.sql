@@ -844,18 +844,30 @@ CREATE VIEW public.vw_afa_schedule AS
 --
 
 CREATE VIEW public.vw_guv_report AS
- SELECT date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone) AS periode,
-    bl.direction,
-    bl.account_skr,
-    sum(COALESCE(bl.net_amount, (0)::numeric)) AS netto_summe,
-    sum(COALESCE(bl.tax_amount, (0)::numeric)) AS steuer_summe,
-    sum(COALESCE(bl.gross_amount, (0)::numeric)) AS brutto_summe
-   FROM ((public.booking_lines_legacy bl
-     LEFT JOIN public.vouchers v ON ((v.id = bl.voucher_id)))
-     LEFT JOIN public.outgoing_vouchers ov ON ((ov.id = bl.outgoing_id)))
-  WHERE (COALESCE(v.status, ov.status) <> 'draft'::text)
-  GROUP BY (date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone)), bl.direction, bl.account_skr
-  ORDER BY (date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone)), bl.direction, bl.account_skr;
+SELECT
+    DATE_TRUNC('month', COALESCE(v.booking_date, v.voucher_date)::timestamptz) AS periode,
+    'incoming'::text AS direction,
+    vl.account_skr,
+    SUM(COALESCE(vl.net_amount, 0)) AS netto_summe,
+    SUM(COALESCE(vl.tax_amount, 0)) AS steuer_summe,
+    SUM(COALESCE(vl.net_amount + vl.tax_amount, 0)) AS brutto_summe
+FROM public.voucher_lines vl
+JOIN public.vouchers v ON v.id = vl.voucher_id
+WHERE v.status <> 'draft'
+GROUP BY 1, 2, 3
+UNION ALL
+SELECT
+    DATE_TRUNC('month', COALESCE(ov.booking_date, ov.voucher_date)::timestamptz) AS periode,
+    'outgoing'::text AS direction,
+    ol.account_skr,
+    SUM(COALESCE(ol.net_amount, 0)) AS netto_summe,
+    SUM(COALESCE(ol.tax_amount, 0)) AS steuer_summe,
+    SUM(COALESCE(ol.net_amount + ol.tax_amount, 0)) AS brutto_summe
+FROM public.outgoing_lines ol
+JOIN public.outgoing_vouchers ov ON ov.id = ol.outgoing_id
+WHERE ov.status <> 'draft'
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3;
 
 
 --
@@ -929,21 +941,36 @@ CREATE VIEW public.vw_guv_result AS
 --
 
 CREATE VIEW public.vw_journal AS
- SELECT COALESCE(v.voucher_date, ov.voucher_date) AS datum,
-    bl.direction,
-    bl.account_skr,
-    bl.description,
-    bl.net_amount,
-    bl.tax_amount,
-    bl.gross_amount,
-    COALESCE(v.partner_name, ov.partner_name) AS partner,
-    COALESCE(v.voucher_number, ov.voucher_number) AS belegnummer,
-    COALESCE(v.document_type, ov.document_type) AS belegart
-   FROM ((public.booking_lines_legacy bl
-     LEFT JOIN public.vouchers v ON ((v.id = bl.voucher_id)))
-     LEFT JOIN public.outgoing_vouchers ov ON ((ov.id = bl.outgoing_id)))
-  WHERE (COALESCE(v.status, ov.status) <> 'draft'::text)
-  ORDER BY COALESCE(v.voucher_date, ov.voucher_date), bl.account_skr;
+SELECT
+    COALESCE(v.booking_date, v.voucher_date) AS datum,
+    'incoming'::text AS direction,
+    vl.account_skr,
+    vl.description,
+    vl.net_amount,
+    vl.tax_amount,
+    (vl.net_amount + vl.tax_amount) AS gross_amount,
+    v.partner_name  AS partner,
+    v.voucher_number AS belegnummer,
+    v.document_type  AS belegart
+FROM public.voucher_lines vl
+JOIN public.vouchers v ON v.id = vl.voucher_id
+WHERE v.status <> 'draft'
+UNION ALL
+SELECT
+    COALESCE(ov.booking_date, ov.voucher_date) AS datum,
+    'outgoing'::text AS direction,
+    ol.account_skr,
+    ol.description,
+    ol.net_amount,
+    ol.tax_amount,
+    (ol.net_amount + ol.tax_amount) AS gross_amount,
+    ov.partner_name  AS partner,
+    ov.voucher_number AS belegnummer,
+    ov.document_type  AS belegart
+FROM public.outgoing_lines ol
+JOIN public.outgoing_vouchers ov ON ov.id = ol.outgoing_id
+WHERE ov.status <> 'draft'
+ORDER BY datum, account_skr;
 
 
 --
@@ -951,40 +978,32 @@ CREATE VIEW public.vw_journal AS
 --
 
 CREATE VIEW public.vw_susa AS
- SELECT bl.account_skr,
-    COALESCE(a.gruppe, 'Unklassifiziert'::text) AS bilanz_gruppe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'incoming'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS soll_summe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS haben_summe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            WHEN (bl.direction = 'incoming'::text) THEN (- COALESCE(bl.net_amount, (0)::numeric))
-            ELSE (0)::numeric
-        END) AS saldo,
-        CASE
-            WHEN (sum(
-            CASE
-                WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-                WHEN (bl.direction = 'incoming'::text) THEN (- COALESCE(bl.net_amount, (0)::numeric))
-                ELSE (0)::numeric
-            END) >= (0)::numeric) THEN 'Haben'::text
-            ELSE 'Soll'::text
-        END AS richtung
-   FROM (((public.booking_lines_legacy bl
-     LEFT JOIN public.account_groups a ON (((bl.account_skr >= a.skr_min) AND (bl.account_skr <= a.skr_max))))
-     LEFT JOIN public.vouchers v ON ((v.id = bl.voucher_id)))
-     LEFT JOIN public.outgoing_vouchers ov ON ((ov.id = bl.outgoing_id)))
-  WHERE (COALESCE(v.status, ov.status) <> 'draft'::text)
-  GROUP BY bl.account_skr, COALESCE(a.gruppe, 'Unklassifiziert'::text)
-  ORDER BY bl.account_skr;
+WITH all_lines AS (
+    SELECT vl.account_skr, COALESCE(vl.net_amount, 0) AS net_amount, 'incoming'::text AS direction
+    FROM public.voucher_lines vl
+    JOIN public.vouchers v ON v.id = vl.voucher_id
+    WHERE v.status <> 'draft'
+    UNION ALL
+    SELECT ol.account_skr, COALESCE(ol.net_amount, 0) AS net_amount, 'outgoing'::text AS direction
+    FROM public.outgoing_lines ol
+    JOIN public.outgoing_vouchers ov ON ov.id = ol.outgoing_id
+    WHERE ov.status <> 'draft'
+)
+SELECT
+    al.account_skr,
+    COALESCE(ag.gruppe, 'Unklassifiziert') AS bilanz_gruppe,
+    SUM(CASE WHEN al.direction = 'incoming' THEN  al.net_amount ELSE 0 END) AS soll_summe,
+    SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount ELSE 0 END) AS haben_summe,
+    SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount
+             WHEN al.direction = 'incoming' THEN -al.net_amount
+             ELSE 0 END) AS saldo,
+    CASE WHEN SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount
+                       WHEN al.direction = 'incoming' THEN -al.net_amount
+                       ELSE 0 END) >= 0 THEN 'Haben' ELSE 'Soll' END AS richtung
+FROM all_lines al
+LEFT JOIN public.account_groups ag ON al.account_skr >= ag.skr_min AND al.account_skr <= ag.skr_max
+GROUP BY al.account_skr, COALESCE(ag.gruppe, 'Unklassifiziert')
+ORDER BY al.account_skr;
 
 
 --
@@ -992,41 +1011,41 @@ CREATE VIEW public.vw_susa AS
 --
 
 CREATE VIEW public.vw_susa_monthly AS
- SELECT date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone) AS periode,
-    bl.account_skr,
-    COALESCE(ag.gruppe, 'Unklassifiziert'::text) AS bilanz_gruppe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'incoming'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS soll_summe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS haben_summe,
-    sum(
-        CASE
-            WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-            WHEN (bl.direction = 'incoming'::text) THEN (- COALESCE(bl.net_amount, (0)::numeric))
-            ELSE (0)::numeric
-        END) AS saldo,
-        CASE
-            WHEN (sum(
-            CASE
-                WHEN (bl.direction = 'outgoing'::text) THEN COALESCE(bl.net_amount, (0)::numeric)
-                WHEN (bl.direction = 'incoming'::text) THEN (- COALESCE(bl.net_amount, (0)::numeric))
-                ELSE (0)::numeric
-            END) >= (0)::numeric) THEN 'Haben'::text
-            ELSE 'Soll'::text
-        END AS richtung
-   FROM (((public.booking_lines_legacy bl
-     LEFT JOIN public.vouchers v ON ((v.id = bl.voucher_id)))
-     LEFT JOIN public.outgoing_vouchers ov ON ((ov.id = bl.outgoing_id)))
-     LEFT JOIN public.account_groups ag ON (((bl.account_skr >= ag.skr_min) AND (bl.account_skr <= ag.skr_max))))
-  WHERE (COALESCE(v.status, ov.status) <> 'draft'::text)
-  GROUP BY (date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone)), bl.account_skr, COALESCE(ag.gruppe, 'Unklassifiziert'::text)
-  ORDER BY (date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone)), bl.account_skr;
+WITH all_lines AS (
+    SELECT
+        vl.account_skr,
+        COALESCE(vl.net_amount, 0) AS net_amount,
+        'incoming'::text AS direction,
+        COALESCE(v.booking_date, v.voucher_date) AS datum
+    FROM public.voucher_lines vl
+    JOIN public.vouchers v ON v.id = vl.voucher_id
+    WHERE v.status <> 'draft'
+    UNION ALL
+    SELECT
+        ol.account_skr,
+        COALESCE(ol.net_amount, 0) AS net_amount,
+        'outgoing'::text AS direction,
+        COALESCE(ov.booking_date, ov.voucher_date) AS datum
+    FROM public.outgoing_lines ol
+    JOIN public.outgoing_vouchers ov ON ov.id = ol.outgoing_id
+    WHERE ov.status <> 'draft'
+)
+SELECT
+    DATE_TRUNC('month', datum::timestamptz) AS periode,
+    al.account_skr,
+    COALESCE(ag.gruppe, 'Unklassifiziert') AS bilanz_gruppe,
+    SUM(CASE WHEN al.direction = 'incoming' THEN  al.net_amount ELSE 0 END) AS soll_summe,
+    SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount ELSE 0 END) AS haben_summe,
+    SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount
+             WHEN al.direction = 'incoming' THEN -al.net_amount
+             ELSE 0 END) AS saldo,
+    CASE WHEN SUM(CASE WHEN al.direction = 'outgoing' THEN  al.net_amount
+                       WHEN al.direction = 'incoming' THEN -al.net_amount
+                       ELSE 0 END) >= 0 THEN 'Haben' ELSE 'Soll' END AS richtung
+FROM all_lines al
+LEFT JOIN public.account_groups ag ON al.account_skr >= ag.skr_min AND al.account_skr <= ag.skr_max
+GROUP BY DATE_TRUNC('month', datum::timestamptz), al.account_skr, COALESCE(ag.gruppe, 'Unklassifiziert')
+ORDER BY DATE_TRUNC('month', datum::timestamptz), al.account_skr;
 
 
 --
@@ -1054,11 +1073,15 @@ CREATE VIEW public.vw_susa_monthly_cumulative AS
 --
 
 CREATE VIEW public.vw_unclassified_accounts AS
- SELECT DISTINCT bl.account_skr
-   FROM (public.booking_lines_legacy bl
-     LEFT JOIN public.account_groups ag ON (((bl.account_skr >= ag.skr_min) AND (bl.account_skr <= ag.skr_max))))
-  WHERE (ag.id IS NULL)
-  ORDER BY bl.account_skr;
+SELECT DISTINCT account_skr
+FROM (
+    SELECT vl.account_skr FROM public.voucher_lines vl
+    UNION ALL
+    SELECT ol.account_skr FROM public.outgoing_lines ol
+) all_accounts
+LEFT JOIN public.account_groups ag ON account_skr >= ag.skr_min AND account_skr <= ag.skr_max
+WHERE ag.id IS NULL
+ORDER BY account_skr;
 
 
 --
@@ -1066,53 +1089,40 @@ CREATE VIEW public.vw_unclassified_accounts AS
 --
 
 CREATE VIEW public.vw_ust_report AS
- WITH basis AS (
-         SELECT bl.id,
-            bl.direction,
-            bl.net_amount,
-            bl.tax_amount,
-            bl.gross_amount,
-            bl.tax_type,
-            COALESCE(v.status, ov.status) AS status,
-            date_trunc('month'::text, (COALESCE(v.booking_date, v.voucher_date, ov.booking_date, ov.voucher_date))::timestamp with time zone) AS periode
-           FROM ((public.booking_lines_legacy bl
-             LEFT JOIN public.vouchers v ON ((v.id = bl.voucher_id)))
-             LEFT JOIN public.outgoing_vouchers ov ON ((ov.id = bl.outgoing_id)))
-        )
- SELECT b.periode,
-    sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'ust%'::text) OR ((b.direction = 'outgoing'::text) AND (COALESCE(b.tax_amount, (0)::numeric) <> (0)::numeric))) THEN COALESCE(b.tax_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS ust_output,
-    sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'vst%'::text) OR ((b.direction = 'incoming'::text) AND (COALESCE(b.tax_amount, (0)::numeric) <> (0)::numeric))) THEN COALESCE(b.tax_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS ust_input,
-    sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'ust%'::text) OR (b.direction = 'outgoing'::text)) THEN COALESCE(b.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS nettoumsatz,
-    sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'vst%'::text) OR (b.direction = 'incoming'::text)) THEN COALESCE(b.net_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) AS nettoeinkauf,
-    (sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'ust%'::text) OR ((b.direction = 'outgoing'::text) AND (COALESCE(b.tax_amount, (0)::numeric) <> (0)::numeric))) THEN COALESCE(b.tax_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END) - sum(
-        CASE
-            WHEN ((b.tax_type ~~ 'vst%'::text) OR ((b.direction = 'incoming'::text) AND (COALESCE(b.tax_amount, (0)::numeric) <> (0)::numeric))) THEN COALESCE(b.tax_amount, (0)::numeric)
-            ELSE (0)::numeric
-        END)) AS zahlbetrag
-   FROM basis b
-  WHERE (COALESCE(b.status, 'draft'::text) <> 'draft'::text)
-  GROUP BY b.periode
-  ORDER BY b.periode;
+WITH basis AS (
+    SELECT
+        vl.net_amount,
+        vl.tax_amount,
+        'incoming'::text AS direction,
+        DATE_TRUNC('month', COALESCE(v.booking_date, v.voucher_date)::timestamptz) AS periode
+    FROM public.voucher_lines vl
+    JOIN public.vouchers v ON v.id = vl.voucher_id
+    WHERE v.status <> 'draft'
+    UNION ALL
+    SELECT
+        ol.net_amount,
+        ol.tax_amount,
+        'outgoing'::text AS direction,
+        DATE_TRUNC('month', COALESCE(ov.booking_date, ov.voucher_date)::timestamptz) AS periode
+    FROM public.outgoing_lines ol
+    JOIN public.outgoing_vouchers ov ON ov.id = ol.outgoing_id
+    WHERE ov.status <> 'draft'
+)
+SELECT
+    b.periode,
+    SUM(CASE WHEN b.direction = 'outgoing' AND COALESCE(b.tax_amount, 0) <> 0
+             THEN COALESCE(b.tax_amount, 0) ELSE 0 END) AS ust_output,
+    SUM(CASE WHEN b.direction = 'incoming' AND COALESCE(b.tax_amount, 0) <> 0
+             THEN COALESCE(b.tax_amount, 0) ELSE 0 END) AS ust_input,
+    SUM(CASE WHEN b.direction = 'outgoing' THEN COALESCE(b.net_amount, 0) ELSE 0 END) AS nettoumsatz,
+    SUM(CASE WHEN b.direction = 'incoming' THEN COALESCE(b.net_amount, 0) ELSE 0 END) AS nettoeinkauf,
+    SUM(CASE WHEN b.direction = 'outgoing' AND COALESCE(b.tax_amount, 0) <> 0
+             THEN COALESCE(b.tax_amount, 0) ELSE 0 END) -
+    SUM(CASE WHEN b.direction = 'incoming' AND COALESCE(b.tax_amount, 0) <> 0
+             THEN COALESCE(b.tax_amount, 0) ELSE 0 END) AS zahlbetrag
+FROM basis b
+GROUP BY b.periode
+ORDER BY b.periode;
 
 
 --
