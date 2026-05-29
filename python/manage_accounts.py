@@ -30,7 +30,9 @@ def list_accounts():
         if r[5]: typ_flags.append("E" )  # Erlös
         if r[6]: typ_flags.append("ACT") # Aktivkonto
         if r[7]: typ_flags.append("INT") # Intern
-        print(f"{r[0]:6s} | {r[1]:40s} | {r[2]:>4.0f}% | {r[3]:12s} | {' '.join(typ_flags)}")
+        tax = r[2] if r[2] is not None else 0
+        cat = r[3] or ""
+        print(f"{r[0]:6s} | {r[1]:40s} | {tax:>4.0f}% | {cat:12s} | {' '.join(typ_flags)}")
 
 
 def search_accounts(term):

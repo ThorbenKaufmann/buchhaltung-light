@@ -49,21 +49,31 @@ ihrer eigenen Position – kein Pfad muss angepasst werden.
 
 ### 2.1 Konten einrichten
 
-Bankkonten sind Einträge in der Tabelle `accounts`. Neue Konten anlegen:
+Bankkonten sind Einträge in der Tabelle `accounts`. Neue Konten werden direkt per SQL angelegt (siehe `sql/accounts.sql`):
 
-```bash
-python3 python/manage_accounts.py --list
-python3 python/manage_accounts.py --search "Volksbank"
-python3 python/manage_accounts.py --add ID NAME TAX KATEGORIE
+```sql
+INSERT INTO accounts (name, type, iban)
+VALUES ('Hauptkonto', 'bank', 'DE...');
 ```
+
+Erlaubte Typen: `bank`, `credit`, `paypal`, `cash`, `savings`.
 
 Bekannte Konten (Standard-Setup):
 
 | ID | Name | Typ |
 |----|------|-----|
-| 1 | Girokonto Volksbank | MT940 |
-| 2 | Mastercard | MT940 |
-| 3 | PayPal | CSV |
+| 1 | Hauptkonto | bank |
+| 2 | Mastercard | credit |
+| 3 | PayPal | paypal |
+| 4 | Tagesgeld | savings |
+
+Beispiel:
+
+```bash
+psql -h datacenter.itc-embedded.de -U postgres -d bhl-ug -f sql/accounts.sql
+```
+
+
 
 ### 2.2 Umsätze importieren
 
@@ -80,6 +90,18 @@ python3 python/batch_import_mt940.py <verzeichnis> <account_id>
 Die Dateien müssen die Endung `.mt940` haben.
 Dubletten werden per Hash erkannt und stillschweigend übersprungen –
 der Import ist idempotent.
+
+**Commerzbank (CSV-Export):**
+
+```bash
+python3 python/import_commerzbank_csv.py <datei.csv> <account_id>
+python3 python/import_commerzbank_csv.py <datei.csv> <account_id> --dry-run
+```
+
+CSV-Export unter: Online-Banking → Umsätze → Herunterladen → CSV.
+Dateiname hat typischerweise die Form `DE36…_EUR_DD-MM-YYYY_HHMM.csv`.
+Der Gegenparteiname wird automatisch aus dem Buchungstext extrahiert (vor BIC/IBAN/End-to-End-Ref).
+Dubletten werden per Hash erkannt und übersprungen – der Import ist idempotent.
 
 **PayPal (CSV-Export):**
 

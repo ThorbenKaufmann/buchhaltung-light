@@ -30,34 +30,31 @@ def run_tax_summary(month: str):
     print(f"📆 Steuer-Summen {start_date} bis {end_date}")
     print()
 
-    # --- Vorsteuer ---
+    # --- Vorsteuer (aus Eingangsbelegen) ---
     cur.execute("""
-        SELECT COALESCE(SUM(bl.amount), 0)
-        FROM booking_lines_new bl
-        JOIN voucher_lines vl ON bl.source_type = 'incoming' AND bl.source_id = vl.id
-        JOIN vouchers v ON vl.voucher_id = v.id
-        WHERE bl.account_skr = '1576'
+        SELECT COALESCE(SUM(bl.tax_amount), 0)
+        FROM booking_lines_legacy bl
+        JOIN vouchers v ON bl.voucher_id = v.id
+        WHERE bl.direction = 'incoming'
+          AND bl.tax_amount > 0
           AND v.voucher_date >= %s
           AND v.voucher_date < %s
     """, (start_date, end_date))
 
     vorsteuer = Decimal(cur.fetchone()[0] or 0)
 
-    # --- Umsatzsteuer ---
+    # --- Umsatzsteuer (aus Ausgangsbelegen) ---
     cur.execute("""
-        SELECT COALESCE(SUM(bl.amount), 0)
-        FROM booking_lines_new bl
-        JOIN outgoing_lines ol ON bl.source_type = 'outgoing' AND bl.source_id = ol.id
-        JOIN outgoing_vouchers ov ON ol.outgoing_id = ov.id
-        WHERE bl.account_skr = '1776'
+        SELECT COALESCE(SUM(bl.tax_amount), 0)
+        FROM booking_lines_legacy bl
+        JOIN outgoing_vouchers ov ON bl.outgoing_id = ov.id
+        WHERE bl.direction = 'outgoing'
+          AND bl.tax_amount > 0
           AND ov.voucher_date >= %s
           AND ov.voucher_date < %s
     """, (start_date, end_date))
 
-    ust_raw = Decimal(cur.fetchone()[0] or 0)
-
-    # Achtung: USt ist negativ gebucht → drehen
-    umsatzsteuer = -ust_raw
+    umsatzsteuer = Decimal(cur.fetchone()[0] or 0)
 
     # --- Ausgabe ---
     print(f"{'Typ':<20} {'Betrag €':>12}")
