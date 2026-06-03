@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 from datetime import date
 from decimal import Decimal
+import os
+import subprocess
 import sys
 import yaml
 from jinja2 import Environment, FileSystemLoader
+
+LCO_DIR = os.path.join(os.path.dirname(__file__), "../../config/latex/lco")
 
 BASE_RATE = Decimal(1.27)    # Basiszinssatz
 DUNNING_DAYS = float(7)
@@ -160,13 +164,32 @@ def main(yaml_path, template_path, out_path):
 
     print(f"Wrote {out_path}")
 
+    pdf_path = out_path.replace(".tex", ".pdf")
+    lco_abs = os.path.abspath(LCO_DIR)
+    env = os.environ.copy()
+    env["TEXINPUTS"] = f"{lco_abs}:"
+
+    for _ in range(2):  # two passes for cross-references
+        result = subprocess.run(
+            ["lualatex", "--interaction=nonstopmode", out_path],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(result.stdout[-3000:])
+            sys.exit(result.returncode)
+
+    print(f"Wrote {pdf_path}")
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("usage: render_quote.py quote.yaml template.tex.j2 output.tex")
+    if len(sys.argv) != 3:
+        print("usage: render_quote.py quote.yaml template.tex.j2")
         sys.exit(1)
 
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    quote_id = os.path.splitext(os.path.basename(sys.argv[1]))[0]  # e.g. quote_AN20260002
+    main(sys.argv[1], sys.argv[2], f"{quote_id}.tex")
     
 
 
