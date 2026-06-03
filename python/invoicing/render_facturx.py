@@ -36,35 +36,30 @@ def main(yaml_path, template_path, out_path):
 
 
 
+    vat_rate_pct = int(data.get("tax", {}).get("rate", 19))
+
     net_total = Decimal("0.00")
-
     for line in lines:
-        qty = Decimal(str(line["quantity"]))
-        price = Decimal(str(line["unit_price"]))
-        net_total += qty * price
-
-    net_total = net_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    vat_rate = Decimal("0.19")
-    vat_amount = (net_total * vat_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
+        net_total += Decimal(str(line["quantity"])) * Decimal(str(line["unit_price"]))
+    net_total   = net_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    vat_amount  = (net_total * Decimal(vat_rate_pct) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     gross_total = net_total + vat_amount
 
     def eur(x):
         return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    data["net_total"] = eur(net_total)
-    data["vat_amount"] = eur(vat_amount)
-    data["gross_total"] = eur(gross_total)
-    data["vat_rate_percent"] = 19
+    data["net_total"]        = eur(net_total)
+    data["vat_amount"]       = eur(vat_amount)
+    data["gross_total"]      = eur(gross_total)
+    data["vat_rate_percent"] = vat_rate_pct
 
     data["totals"] = {
-    "net": f"{net_total:.2f}",
-    "tax": f"{vat_amount:.2f}",
-    "gross": f"{gross_total:.2f}",
-    "prepaid": "0.00",
-    "payable": f"{gross_total:.2f}",
-}
+        "net":     f"{net_total:.2f}",
+        "tax":     f"{vat_amount:.2f}",
+        "gross":   f"{gross_total:.2f}",
+        "prepaid": "0.00",
+        "payable": f"{gross_total:.2f}",
+    }
 
 
     # Template
