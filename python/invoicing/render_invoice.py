@@ -162,6 +162,10 @@ def compile_pdf(tex_path):
 
 
 def embed_facturx(pdf_path, xml_path):
+    import shutil
+    if not shutil.which("facturx-pdfgen"):
+        print("Warning: facturx-pdfgen not found — skipping Factur-X embedding (install with: pip install factur-x)")
+        return
     fx_path = pdf_path.replace(".pdf", "_x.pdf")
     if os.path.exists(fx_path):
         os.remove(fx_path)
