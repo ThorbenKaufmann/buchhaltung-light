@@ -77,6 +77,29 @@ def list_accounts(cur):
         print(f"     {acc_id:6} | {name:40s} | {default_tax:.2f}%")
 
 
+def _insert_booking_lines_new(cur, source_type: str, source_id: int,
+                               account_skr: str, net: Decimal, tax: Decimal):
+    """Erzeugt die drei Doppelbuchungs-Zeilen in booking_lines_new."""
+    gross = net + tax
+    if source_type == "incoming":
+        lines = [
+            (source_type, source_id, account_skr, net),   # Aufwand
+            (source_type, source_id, "1576",       tax),   # Vorsteuer
+            (source_type, source_id, "1600",      -gross), # Verbindlichkeit
+        ]
+    else:
+        lines = [
+            (source_type, source_id, "1200",       gross), # Forderung
+            (source_type, source_id, account_skr, -net),   # Erlös
+            (source_type, source_id, "1776",      -tax),   # Umsatzsteuer
+        ]
+    for line in lines:
+        cur.execute("""
+            INSERT INTO booking_lines_new (source_type, source_id, account_skr, amount)
+            VALUES (%s, %s, %s, %s)
+        """, line)
+
+
 def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
     """Weist Belegen Konten zu."""
     conn = get_connection()
@@ -85,17 +108,18 @@ def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
     mdate = datetime.strptime(month, "%Y-%m")
     start = mdate.replace(day=1)
     end = (start + timedelta(days=32)).replace(day=1)
-    vtable = "vouchers" if direction == "incoming" else "outgoing_vouchers"
-    id_field = "voucher_id" if direction == "incoming" else "outgoing_id"
+    vtable   = "vouchers"      if direction == "incoming" else "outgoing_vouchers"
+    ltable   = "voucher_lines" if direction == "incoming" else "outgoing_lines"
+    id_field = "voucher_id"    if direction == "incoming" else "outgoing_id"
 
     # Belege ohne Kontierung holen
     cur.execute(f"""
         SELECT id, partner_name, total_amount, voucher_date
           FROM {vtable}
-         WHERE {vtable}.status != 'cancelled'
-           AND {vtable}.voucher_date BETWEEN %s AND %s
+         WHERE status != 'cancelled'
+           AND voucher_date BETWEEN %s AND %s
            AND id NOT IN (
-               SELECT {id_field} FROM booking_lines_legacy WHERE {id_field} IS NOT NULL
+               SELECT {id_field} FROM {ltable} WHERE {id_field} IS NOT NULL
            )
          ORDER BY voucher_date;
     """, (start, end))
@@ -145,15 +169,18 @@ def assign_accounts(direction: str, month: str, show_pdf=False, auto=False):
         tax_amount = (net * tax_rate / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         tax_type = determine_tax_type(direction, tax_rate, note)
 
-        cur.execute("""
-            INSERT INTO booking_lines_legacy
-                (direction, {id_field}, account_skr, description,
-                 net_amount, tax_rate, tax_amount, gross_amount,
-                 receipt_status, created_at, tax_type)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'complete',NOW(),%s);
-        """.format(id_field=id_field),
-            (direction, vid, account, note or "", net, tax_rate, tax_amount, gross, tax_type)
-        )
+        # In voucher_lines / outgoing_lines schreiben
+        cur.execute(f"""
+            INSERT INTO {ltable}
+                ({id_field}, account_skr, description,
+                 net_amount, tax_rate, tax_amount, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            RETURNING id;
+        """, (vid, account, note or "", net, tax_rate, tax_amount))
+        line_id = cur.fetchone()[0]
+
+        # Doppelbuchung in booking_lines_new erzeugen
+        _insert_booking_lines_new(cur, direction, line_id, account, net, tax_amount)
 
         conn.commit()
         print(f"  ✅ Beleg {vid} → Konto {account} ({tax_type}) verbucht.\n")
