@@ -50,7 +50,7 @@
 
             <!-- Delivery -->
             <ram:SpecifiedLineTradeDelivery>
-                <ram:BilledQuantity unitCode="{{ line.unit }}">
+                <ram:BilledQuantity unitCode="{{ line.unit_code }}">
                     {{ line.quantity }}
                 </ram:BilledQuantity>
             </ram:SpecifiedLineTradeDelivery>
@@ -115,7 +115,7 @@
                     <ram:PostcodeCode>{{ buyer.zip }}</ram:PostcodeCode>
                     <ram:LineOne>{{ buyer.street }}</ram:LineOne>
                     <ram:CityName>{{ buyer.city }}</ram:CityName>
-                    <ram:CountryID>{{ buyer.country }}</ram:CountryID>
+                    <ram:CountryID>{{ buyer.country_code if buyer.country_code else buyer.country }}</ram:CountryID>
                 </ram:PostalTradeAddress>
                 <ram:URIUniversalCommunication>
                     <ram:URIID schemeID="EM">{{ buyer.communication.email }}</ram:URIID>
@@ -148,13 +148,14 @@
                 <ram:TypeCode>58</ram:TypeCode>
                 <ram:PayeePartyCreditorFinancialAccount>
                     <ram:IBANID>{{ payment.iban }}</ram:IBANID>
-                    <ram:AccountName>{{ payment.account_name }}</ram:AccountName>
+                    {% if payment.account_name %}<ram:AccountName>{{ payment.account_name }}</ram:AccountName>{% endif %}
                 </ram:PayeePartyCreditorFinancialAccount>
             </ram:SpecifiedTradeSettlementPaymentMeans>
 
             <ram:ApplicableTradeTax>
                 <ram:CalculatedAmount>{{ totals.tax }}</ram:CalculatedAmount>
                 <ram:TypeCode>VAT</ram:TypeCode>
+                {% if tax.category == "AE" %}<ram:ExemptionReason>Reverse charge</ram:ExemptionReason>{% endif %}
                 <ram:BasisAmount>{{ totals.net }}</ram:BasisAmount>
                 <ram:CategoryCode>{{ tax.category }}</ram:CategoryCode>
                 <ram:RateApplicablePercent>{{ tax.rate }}</ram:RateApplicablePercent>

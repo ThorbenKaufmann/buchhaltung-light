@@ -2,11 +2,14 @@
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+
+BASE_RATE    = Decimal("1.27")   # Basiszinssatz
+DUNNING_DAYS = 7
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LCO_DIR    = os.path.join(SCRIPT_DIR, "../../config/latex/lco")
@@ -47,15 +50,16 @@ def eur(x):
 def compute_data(data):
     lines = data["lines"]
 
-    issue_date   = datetime.strptime(data["quote"]["issue_date"], "%Y-%m-%d").date()
-    valid_days   = int(data.get("payment", {}).get("terms_days", 30))
+    issue_date   = datetime.strptime(data["invoice"]["issue_date"], "%Y-%m-%d").date()
+    payment_days = int(data.get("payment", {}).get("terms_days", 14))
     vat_rate_pct = int(data.get("tax", {}).get("rate", 19))
 
     if "due_date" in data:
-        valid_until = datetime.strptime(data["due_date"], "%Y-%m-%d").date()
+        due_date = datetime.strptime(data["due_date"], "%Y-%m-%d").date()
     else:
-        valid_until = issue_date + timedelta(days=valid_days)
-    data["due_date"] = valid_until.isoformat()
+        due_date = issue_date + timedelta(days=payment_days)
+
+    data["due_date"] = due_date.isoformat()
 
     net_total = Decimal("0.00")
     for line in lines:
@@ -69,11 +73,36 @@ def compute_data(data):
     data["gross_total"]      = eur(gross_total)
     data["vat_rate_percent"] = vat_rate_pct
 
+    today = date.today()
+    days_in_delay = (today - due_date).days if today > due_date else 0
+    data["days_in_delay"] = days_in_delay
+
+    if days_in_delay > 0:
+        interest_rate  = (BASE_RATE + Decimal("9.00")) / Decimal("100")
+        delay_interest = (
+            gross_total * interest_rate * Decimal(days_in_delay) / Decimal("365")
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        delay_interest = Decimal("0.00")
+
+    default_compensation_fee = Decimal("40.00")
+    total_claim = (gross_total + delay_interest + default_compensation_fee).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+    data["delay_interest"]           = eur(delay_interest)
+    data["delay_interest_raw"]       = delay_interest
+    data["default_compensation_fee"] = eur(default_compensation_fee)
+    data["total_claim"]              = eur(total_claim)
+    data["date_today"]               = today
+    data["final_deadline"]           = today + timedelta(days=DUNNING_DAYS)
+    data["final_days"]               = Decimal(DUNNING_DAYS)
+
     return data
 
 
 # -----------------------------
-# Render steps
+# Render + compile
 # -----------------------------
 
 def render_tex(data, template_path, out_path):
@@ -119,8 +148,9 @@ def main(yaml_path, template_path):
 
     data = compute_data(data)
 
-    base     = os.path.splitext(os.path.basename(yaml_path))[0]  # e.g. quote_AN20260001
-    tex_path = f"{base}.tex"
+    invoice_stem  = os.path.splitext(os.path.basename(yaml_path))[0]    # invoice_RE20260001
+    template_stem = os.path.splitext(os.path.splitext(os.path.basename(template_path))[0])[0]  # dunning_letter_easy
+    tex_path = f"{invoice_stem}_{template_stem}.tex"
 
     render_tex(data, template_path, tex_path)
     compile_pdf(tex_path)
@@ -128,7 +158,7 @@ def main(yaml_path, template_path):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: render_quote.py quote.yaml template.tex.j2")
+        print("usage: render_dunning.py invoice.yaml template.tex.j2")
         sys.exit(1)
 
     main(sys.argv[1], sys.argv[2])
