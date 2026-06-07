@@ -808,7 +808,7 @@ ALTER SEQUENCE public.vouchers_id_seq OWNED BY public.vouchers.id;
 --
 
 CREATE VIEW public.vw_afa_schedule AS
- WITH series AS (
+ WITH params AS (
          SELECT d.id,
             d.asset_name,
             d.account_skr,
@@ -818,9 +818,25 @@ CREATE VIEW public.vw_afa_schedule AS
             d.start_year,
             d.remaining_value,
             d.method,
+            (EXTRACT(year FROM d.acquisition_date))::integer AS acq_year,
+            (13 - (EXTRACT(month FROM d.acquisition_date))::integer) AS months_first
+           FROM public.depreciations d
+        ),
+        series AS (
+         SELECT p.id,
+            p.asset_name,
+            p.account_skr,
+            p.acquisition_date,
+            p.acquisition_value,
+            p.useful_life_years,
+            p.start_year,
+            p.remaining_value,
+            p.method,
+            p.acq_year,
+            p.months_first,
             gs.gs AS jahr
-           FROM public.depreciations d,
-            LATERAL generate_series((EXTRACT(year FROM d.acquisition_date))::integer, (((EXTRACT(year FROM d.acquisition_date))::integer + d.useful_life_years) - 1)) gs(gs)
+           FROM params p,
+            LATERAL generate_series(p.acq_year, (p.acq_year + p.useful_life_years)) gs(gs)
         )
  SELECT s.id,
     s.asset_name,
@@ -832,10 +848,13 @@ CREATE VIEW public.vw_afa_schedule AS
     round(
         CASE
             WHEN ((s.remaining_value IS NOT NULL) AND (s.start_year IS NOT NULL) AND (s.jahr = s.start_year)) THEN s.remaining_value
+            WHEN (s.jahr = s.acq_year) THEN (s.acquisition_value / (s.useful_life_years)::numeric) * s.months_first / 12.0
+            WHEN (s.jahr = (s.acq_year + s.useful_life_years)) THEN (s.acquisition_value / (s.useful_life_years)::numeric) * (12 - s.months_first) / 12.0
             ELSE (s.acquisition_value / (s.useful_life_years)::numeric)
         END, 2) AS afa_jahr,
     s.method
    FROM series s
+  WHERE NOT (s.months_first = 12 AND s.jahr = (s.acq_year + s.useful_life_years))
   ORDER BY s.account_skr, s.jahr;
 
 
