@@ -2,7 +2,7 @@
 """
 report_account_summary.py
 
-Kontensummen pro Monat basierend auf booking_lines_legacy + vouchers.
+Kontensummen pro Monat basierend auf booking_lines_new + unified_voucher_lines.
 
 Zeigt:
     Konto → Summe (Netto)
@@ -36,13 +36,13 @@ def run_account_summary(month):
             a.name,
             a.is_expense,
             a.is_revenue,
-            SUM(bl.net_amount) AS summe
-        FROM booking_lines_legacy bl
-        LEFT JOIN vouchers v ON v.id = bl.voucher_id
-        LEFT JOIN outgoing_vouchers ov ON ov.id = bl.outgoing_id
+            SUM(bl.amount) AS summe
+        FROM booking_lines_new bl
+        JOIN unified_voucher_lines u ON u.id = bl.source_id AND u.type = bl.source_type
         JOIN skr03_accounts a ON a.id = bl.account_skr
-        WHERE COALESCE(v.voucher_date, ov.voucher_date) >= %s
-          AND COALESCE(v.voucher_date, ov.voucher_date) < %s
+        WHERE u.voucher_date >= %s
+          AND u.voucher_date < %s
+          AND bl.account_skr NOT IN ('1200', '1600')
         GROUP BY bl.account_skr, a.name, a.is_expense, a.is_revenue
         ORDER BY bl.account_skr;
     """, (start, end))

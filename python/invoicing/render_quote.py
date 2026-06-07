@@ -93,6 +93,24 @@ def render_tex(data, template_path, out_path):
         f.write(template.render(**data))
     print(f"Wrote {out_path}")
 
+    pdf_path = out_path.replace(".tex", ".pdf")
+    lco_abs = os.path.abspath(LCO_DIR)
+    env = os.environ.copy()
+    env["TEXINPUTS"] = f"{lco_abs}:"
+
+    for _ in range(2):  # two passes for cross-references
+        result = subprocess.run(
+            ["lualatex", "--interaction=nonstopmode", out_path],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(result.stdout[-3000:])
+            sys.exit(result.returncode)
+
+    print(f"Wrote {pdf_path}")
+
 
 def compile_pdf(tex_path):
     env = os.environ.copy()
