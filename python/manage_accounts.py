@@ -6,6 +6,8 @@ Erweitert um is_active, is_internal, Kategorie „Privat“ und „Neutral“.
 """
 
 import argparse
+import csv
+import sys
 from db import get_connection
 
 
@@ -56,6 +58,30 @@ def search_accounts(term):
         print(f"{r[0]:6s} | {r[1]:40s} | {r[2]}")
 
 
+def export_accounts(path=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, name, default_tax, category,
+               is_expense, is_revenue, is_active, is_internal, remark
+          FROM skr03_accounts
+         ORDER BY id;
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    out = open(path, "w", newline="", encoding="utf-8") if path else sys.stdout
+    writer = csv.writer(out, delimiter=";")
+    writer.writerow(["id", "name", "default_tax", "category",
+                     "is_expense", "is_revenue", "is_active", "is_internal", "remark"])
+    for r in rows:
+        writer.writerow(r)
+    if path:
+        out.close()
+        print(f"✅ {len(rows)} Konten exportiert nach {path}")
+
+
 def add_account(id, name, tax, cat):
     valid_categories = {
         "Aufwand", "Erlös", "Aktivkonto", "Passivkonto", "Steuer", "Privat", "Neutral", "Intern"
@@ -100,6 +126,8 @@ if __name__ == "__main__":
     ap.add_argument("--add", nargs=4, metavar=("ID", "NAME", "TAX", "CAT"),
                     help="Neues Konto anlegen: ID NAME TAX Kategorie "
                          "(Aufwand/Erlös/Aktivkonto/Passivkonto/Steuer/Privat/Neutral/Intern)")
+    ap.add_argument("--export", metavar="FILE",
+                    help="Alle Konten als CSV exportieren (Dateiname oder '-' für stdout)")
     args = ap.parse_args()
 
     if args.list:
@@ -109,5 +137,7 @@ if __name__ == "__main__":
     elif args.add:
         id, name, tax, cat = args.add
         add_account(id, name, float(tax), cat)
+    elif args.export:
+        export_accounts(None if args.export == "-" else args.export)
     else:
         ap.print_help()

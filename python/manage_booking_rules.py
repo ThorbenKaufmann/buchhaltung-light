@@ -26,9 +26,10 @@ def list_rules(show_flags=False):
         print("ℹ️  Keine Buchungsregeln vorhanden.")
         return
 
-    headers = ["ID", "Pattern", "Richtung", "Konto", "Steuersatz", "Kommentar"]
-    if show_flags:
-        headers += ["Intern", "Privat", "Zyklisch"]
+    headers = ["ID", "Pattern", "Richtung", "Konto", "Steuersatz", "Kommentar", "Intern", "Privat", "Zyklisch"]
+    if not show_flags:
+        rows = [r[:6] for r in rows]
+        headers = headers[:6]
     print(tabulate(rows, headers=headers, tablefmt="github"))
 
 
