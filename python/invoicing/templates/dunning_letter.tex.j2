@@ -1,69 +1,71 @@
-% Beispiel-Brief
-% übersetzt mit lualatex
-
 \documentclass[%
 business,
 DIV=10,
 fontsize=10pt,
-parskip=full-,%Absatzabstand eine Zeile
-	twoside,%zweiseitig
-pagenumber=botright,%Seitenzahl rechts im Fuß
+parskip=full-,
+twoside,
+pagenumber=botright,
 enlargefirstpage]{scrlttr2}
-%\LoadLetterOption{business}
-%\LoadLetterOption{setcompany}%company1 erscheint als Name bei Rücksendeadresse
 
 \usepackage[ngerman]{babel}
-\usepackage{ragged2e}%für Rausatz mit \RaggedRight
-\usepackage{blindtext,mwe}%für Demo
+\usepackage{ragged2e}
 \usepackage{fontspec}
 \usepackage{fontawesome5}
 \setmainfont{Roboto}
 
 \usepackage[table]{xcolor}
 
-%definieren von \grqq und \glqq ( „ bzw. “)
 \renewcommand*{\glqq}{\quotedblbase}
 \renewcommand*{\grqq}{\textquotedblleft}
 
 
 \setkomavar{myref}{ << invoice.number >> }
-\setkomavar{yourref}{ << invoice.po_number>> }
+\setkomavar{yourref}{ << invoice.po_number >> }
 \setkomavar{customer}{ << buyer.customer_number >> }
 \setkomavar{subject}{Mahnung zu Rechnung << invoice.number >> }
 
 \begin{document}
-	%\RaggedRight %Rausatz? Sonst Blocksatz!
-	\begin{letter}{ << buyer.name >> \\ 
-			- << buyer.contact.person_name >> - \\ 
-			<< buyer.street >> \\ 
+	\begin{letter}{ << buyer.name >> \\
+			- << buyer_letter_contact >> - \\
+			<< buyer.street >> \\
 			<< buyer.zip >> << buyer.city >> }
-		
+
 		\opening{Sehr geehrte Damen und Herren,}
-		
-		trotz Fälligkeit und unserer Zahlungserinnerung ist der Betrag in Höhe von \textbf{<< gross_total >>\,€} aus Rechnung \textbf{<< invoice.number >>} vom \textbf{<< invoice.issue_date >>} weiterhin unbezahlt.
-        Wir bitten Sie, den offenen Betrag innerhalb von \textbf{<< final_days >> Tagen} nach Ausstellung dieser Mahnung (\textbf{spätestens zum << final_deadline >>}) auf unser Konto zu überweisen.
 
-        Sollte bis dahin keine Zahlungseingang erfolgt sein, sehen wir uns genötigt, ein Mahnverfahren einzuleiten. Die entstehenden Kosten werden Ihnen gesondert berechnet. 
+		trotz Fälligkeit<% if dunning_level > 1 %> und unserer Zahlungserinnerung<% endif %> ist der Betrag in Höhe von \textbf{<< gross_total >>\,€} aus Rechnung \textbf{<< invoice.number >>} vom \textbf{<< invoice.issue_date | format_date >>} weiterhin unbezahlt.
+<% if final_days %>
+        Wir bitten Sie, den offenen Betrag innerhalb von \textbf{<< final_days >> Tagen} nach Ausstellung dieser Mahnung (\textbf{spätestens zum << final_deadline | format_date >>}) auf unser Konto zu überweisen.
+<% else %>
+        Wir bitten Sie, den offenen Betrag \textbf{bis spätestens zum << final_deadline | format_date >>} auf unser Konto zu überweisen.
+<% endif %>
 
+        Sollte bis dahin keine Zahlungseingang erfolgt sein, sehen wir uns genötigt, ein Mahnverfahren einzuleiten. Die entstehenden Kosten werden Ihnen gesondert berechnet.
+
+<% if dunning_note %>
+        << dunning_note | latex >>
+
+<% endif %>
         \vspace{0.5em}
 
         \begin{tabular}{p{12cm} r}
             \textbf{Zwischensumme (netto)} & << net_total >>\,€ \\
             Umsatzsteuer (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
             \textbf{Rechnungsbetrag} & \textbf{<< gross_total >>\,€} \\
+<% if not fees_suppressed %>
             \hline
             Verzugszins & \textbf{<< delay_interest >>\,€} \\
             Verzugspauschale gem. § 288 Abs. 5 BGB & \textbf{<< default_compensation_fee >>\,€} \\
+<% endif %>
             \hline
             \textbf{Gesamtforderung} & \textbf{<< total_claim >>\,€} \\
         \end{tabular}
 
-        Gesamtforderung berechnet bis zum << date_today >>. Weitere Zinsen laufen bis Zahlungseingang.
-      
+        Gesamtforderung berechnet bis zum << date_today | format_date >>.<% if not fees_suppressed %> Weitere Zinsen laufen bis Zahlungseingang.<% endif %>
+
         Bitte geben Sie bei der Überweisung die Rechnungsnummer als Verwendungszweck an.
 
 		\closing{Mit freundlichen Grüßen}
-		
+
 	\end{letter}
 
 \end{document}

@@ -43,6 +43,32 @@ def eur(x):
     return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def format_date(value, fmt="%d.%m.%Y"):
+    """Format a date object or ISO string as DD.MM.YYYY (or custom fmt)."""
+    if isinstance(value, (date, datetime)):
+        return value.strftime(fmt)
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").strftime(fmt)
+        except ValueError:
+            return value
+    return str(value)
+
+
+def format_date_en(value):
+    """Format a date object or ISO string as '1 June 2026'."""
+    if isinstance(value, (date, datetime)):
+        d = value
+    elif isinstance(value, str):
+        try:
+            d = datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            return value
+    else:
+        return str(value)
+    return f"{d.day} {d.strftime('%B')} {d.year}"
+
+
 # -----------------------------
 # Business Logic
 # -----------------------------
@@ -95,8 +121,38 @@ def compute_data(data):
     data["default_compensation_fee"] = eur(default_compensation_fee)
     data["total_claim"]              = eur(total_claim)
     data["date_today"]               = today
-    data["final_deadline"]           = today + timedelta(days=DUNNING_DAYS)
-    data["final_days"]               = Decimal(DUNNING_DAYS)
+
+    # --- dunning section ---
+    dunning_cfg    = data.get("dunning", {})
+    dunning_level  = int(dunning_cfg.get("level", 1))
+    suppress_fees  = bool(dunning_cfg.get("suppress_fees", False))
+
+    data["dunning_level"]      = dunning_level
+    data["dunning_note"]       = dunning_cfg.get("note", "")
+    data["po_received_date"]   = dunning_cfg.get("po_received_date", "")
+    data["fees_suppressed"]    = suppress_fees
+
+    if suppress_fees:
+        data["delay_interest"]           = eur(Decimal("0.00"))
+        data["delay_interest_raw"]       = Decimal("0.00")
+        data["default_compensation_fee"] = eur(Decimal("0.00"))
+        data["total_claim"]              = eur(gross_total)
+
+    if "extended_due_date" in dunning_cfg and dunning_cfg["extended_due_date"]:
+        data["final_deadline"] = datetime.strptime(dunning_cfg["extended_due_date"], "%Y-%m-%d").date()
+        data["final_days"]     = None
+    elif "credit_days" in dunning_cfg:
+        data["final_deadline"] = issue_date + timedelta(days=int(dunning_cfg["credit_days"]))
+        data["final_days"]     = None
+    else:
+        data["final_deadline"] = today + timedelta(days=DUNNING_DAYS)
+        data["final_days"]     = Decimal(DUNNING_DAYS)
+
+    # Prefer billing/purchasing contact over project contact for dunning letters
+    buyer = data.get("buyer", {})
+    comm  = buyer.get("communication", {})
+    cont  = buyer.get("contact", {})
+    data["buyer_letter_contact"] = comm.get("person_name") or cont.get("person_name", "")
 
     return data
 
@@ -116,7 +172,9 @@ def render_tex(data, template_path, out_path):
         comment_end_string='#>',
         autoescape=False,
     )
-    env.filters["latex"] = latex_escape
+    env.filters["latex"]         = latex_escape
+    env.filters["format_date"]   = format_date
+    env.filters["format_date_en"] = format_date_en
     template = env.get_template(template_path)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(template.render(**data))

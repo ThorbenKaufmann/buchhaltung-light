@@ -1,0 +1,88 @@
+% Order Confirmation
+% compiled with lualatex
+
+\documentclass[%
+business,
+DIV=10,
+fontsize=10pt,
+parskip=full-,
+	twoside,
+pagenumber=botright,
+enlargefirstpage]{scrlttr2}
+
+\usepackage[english]{babel}
+\usepackage{ragged2e}
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\setmainfont{Roboto}
+
+\usepackage[table]{xcolor}
+
+\renewcommand*{\glqq}{\quotedblbase}
+\renewcommand*{\grqq}{\textquotedblleft}
+
+\setkomavar{date}{ << purchase.order_date >> }
+\setkomavar{myref}{ << purchase.number >> }
+\setkomavar{yourref}{ << purchase.po_number >> }
+\setkomavar{customer}{ << buyer.customer_number >> }
+\setkomavar{subject}{Order Confirmation -- PO << purchase.po_number >> }
+
+\begin{document}
+	\begin{letter}{ << buyer.name >> \\
+			- << buyer.contact.person_name >> - \\
+			<< buyer.street >> \\
+			<< buyer.zip >> << buyer.city >> <% if buyer.state %>, << buyer.state >> <% endif %> \\
+            <% if buyer.country %><< buyer.country >><% endif %>
+        }
+
+		\opening{Dear Sir or Madam,}
+
+		We hereby confirm receipt of your purchase order No.\ \textbf{<< purchase.po_number >>},
+		dated << purchase.order_date >>, referring to our quote No.\ << quote.number >>.
+
+		We are pleased to confirm the following services:
+
+        \begingroup
+            \small
+            \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}
+                \hline
+                \rowcolor{gray!15}
+                \textbf{Pos.} & \textbf{ID} & \textbf{Description} & \textbf{Price} & \textbf{Unit} & \textbf{Cnt.} & \textbf{Tax} & \textbf{Netto} \\
+                \hline
+                <% for line in lines %>
+                << loop.index >> & << line.assigned_id >> & << line.name >> \par \scriptsize \textit{ << line.description >> } & << line.unit_price >> & << line.unit_code >> & << line.quantity >> & << line.tax.rate >> & << line.quantity * line.unit_price >> \\
+                \hline
+                <% endfor %>
+            \end{tabular}
+
+            \vspace{0.5em}
+
+            \begin{tabular}{p{9cm} p{4cm} r}
+            &    \textbf{Subtotal (net)} & << net_total >>\,€ \\
+            &    Sales tax (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
+            &    \textbf{Total amount} & \textbf{<< gross_total >>\,€} \\
+            \end{tabular}
+
+        \endgroup
+
+        <% if quote.service_period %>
+        Service period: << quote.service_period.start >> to << quote.service_period.end >>.
+        <% endif %>
+
+        Payment is due within << payment.terms_days >> days of invoice date without deductions.
+        <% if payment.discount %>
+        Discount: << payment.discount.percent >>\% within << payment.discount.days >> days of invoice date.
+        <% endif %>
+        <% if tax.category == "AE" %>
+        Reverse charge -- VAT to be accounted for by the recipient. \\
+        Directive 2006/112/EC Art.\ 44 and 196. \\
+        \textbf{Customer VAT ID: << buyer.vat_id >>}
+        <% endif %>
+
+        We look forward to working with you and will proceed accordingly.
+        Thank you for your order.
+		\closing{Kind Regards}
+
+	\end{letter}
+
+\end{document}
