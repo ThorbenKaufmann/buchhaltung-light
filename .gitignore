@@ -2,6 +2,8 @@ config/db.yaml
 config/latex/lco/business.lco
 **/venv/
 **/secret/
+test-results/
+.pytest_cache/
 **/backlog/
 **/belege/
 **/__pycache__/
