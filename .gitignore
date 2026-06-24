@@ -10,6 +10,9 @@ config/latex/lco/business.lco
 **/invoicing/data
 **/invoicing/*.pdf
 **/invoicing/*.log
+# invoice data and generated PDFs anywhere, including repo root
+*.pdf
+**/data/
 report_transaction_overview_*.csv
 report_transaction_overview_*.xlsx
 schema_backup.sql
