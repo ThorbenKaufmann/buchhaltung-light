@@ -16,6 +16,8 @@ config/latex/lco/business.lco
 report_transaction_overview_*.csv
 report_transaction_overview_*.xlsx
 schema_backup.sql
+backups/
+*.dump
 Suchliste.txt
 unlinked.txt
 removed/
