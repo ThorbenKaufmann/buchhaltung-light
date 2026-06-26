@@ -7,6 +7,12 @@
 -- zusätzlich werden 'cancelled'-Belege ausgefiltert (vorher nur 'draft').
 --
 -- Reversibel: booking_lines_legacy bleibt unangetastet; Views per pg_restore wiederherstellbar.
+--
+-- ⚠️ HINWEIS (2026-06-26): vw_booking_lines_effective sowie die periodenabhängigen Views
+-- (vw_guv_report, vw_ust_report, vw_susa_monthly, vw_journal) werden inzwischen von
+-- python/apply_taxation_mode.py verwaltet (config-gesteuert IST/SOLL, mit Beleg-/Zahlungsdatum).
+-- Diese Datei NICHT nach apply_taxation_mode.py erneut ausführen, sonst fallen die Views auf
+-- die Soll-Basis zurück. Danach ggf. wieder `python3 python/apply_taxation_mode.py` laufen lassen.
 
 BEGIN;
 

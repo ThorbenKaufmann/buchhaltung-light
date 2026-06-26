@@ -10,8 +10,19 @@ Korrekte Behandlung:
 Aufruf:  python3 python/reporting/euer.py --year 2024 [--md datei.md]
 """
 import sys, os, argparse
+from pathlib import Path
+import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db import get_connection
+
+CONFIG = Path(__file__).resolve().parent.parent.parent / "config" / "business.yaml"
+
+
+def taxation_mode():
+    try:
+        return str((yaml.safe_load(CONFIG.read_text()) or {}).get("taxation_mode", "SOLL")).strip().upper()
+    except Exception:
+        return "SOLL"
 
 # Konto → EÜR-Ausgaben-Kategorie (Anlage EÜR Gruppierung)
 KATEGORIEN = [
@@ -48,17 +59,20 @@ def build(year):
     # AfA
     cur.execute("SELECT COALESCE(SUM(afa_jahr),0) FROM vw_afa_schedule WHERE jahr=%s;", (year,))
     afa = cur.fetchone()[0]
-    # Reverse-Charge-Steuer (Klasse 3) für USt
-    cur.execute("SELECT COALESCE(SUM(steuer_summe),0) FROM vw_guv_report WHERE direction='incoming' AND LEFT(account_skr,1)='3' AND DATE_PART('year',periode)=%s;", (year,))
-    rc_tax = cur.fetchone()[0]
-    # Vorsteuer = GESAMTE Eingangs-Steuer (auch auf Anlagegüter voll abziehbar; RC-Steuer inkl.)
-    cur.execute("SELECT COALESCE(SUM(steuer_summe),0) FROM vw_guv_report WHERE direction='incoming' AND DATE_PART('year',periode)=%s;", (year,))
-    vst_in = cur.fetchone()[0]
+    # USt aus vw_ust_report (maßgebliche Ist/Soll-Basis lt. config/business.yaml:
+    # Ausgangs-USt n. Zahlung bei IST, Vorsteuer immer n. Rechnung, §13b/Reverse-Charge beidseitig).
+    cur.execute("""SELECT COALESCE(SUM(ust_output),0), COALESCE(SUM(ust_input),0), COALESCE(SUM(zahlbetrag),0)
+                   FROM vw_ust_report WHERE DATE_PART('year',periode)=%s;""", (year,))
+    ust_output, ust_input, ust_zahllast = cur.fetchone()
     conn.close()
 
+    mode = taxation_mode()
+    basis_hinweis = ("Zufluss-/Abfluss-Prinzip — Umsatz/Aufwand nach Zahlungsdatum, Vorsteuer nach Rechnung"
+                     if mode == "IST" else "Sollversteuerung — nach Rechnungsdatum")
     anlagen = sum(v for k, v in konto.items() if k.startswith("0"))
     erfasst = set()
-    out = [f"# Anlage EÜR {year} – it!consulting kaufmann\n"]
+    out = [f"# Anlage EÜR {year} – it!consulting kaufmann\n",
+           f"_Besteuerungsart: **{mode}** (config/business.yaml) — {basis_hinweis}._\n"]
     out.append("## Betriebseinnahmen\n")
     out.append(f"| Position | Netto |\n|---|--:|")
     out.append(f"| Umsatzsteuerpflichtige Betriebseinnahmen (19 %) | {fmt(ein_net)} |")
@@ -84,16 +98,13 @@ def build(year):
     out.append(f"| − AfA | {fmt(afa)} |")
     out.append(f"| **= Gewinn {year}** | **{fmt(gewinn)}** |\n")
     out.append(f"_Hinweis: Anlagezugänge {fmt(anlagen)} € (SKR03 Klasse 0) sind NICHT im laufenden Aufwand, nur via AfA._\n")
-    # USt
-    ust_out = ein_ust + rc_tax
+    # USt (aus vw_ust_report – maßgebliche Basis lt. Konfiguration)
     out.append("## Umsatzsteuer (zur USt-Jahreserklärung)\n")
     out.append("| Position | Betrag |\n|---|--:|")
-    out.append(f"| USt auf Umsätze 19 % | {fmt(ein_ust)} |")
-    out.append(f"| + §13b/Reverse-Charge geschuldet | {fmt(rc_tax)} |")
-    out.append(f"| = Umsatzsteuer gesamt | {fmt(ust_out)} |")
-    out.append(f"| − Vorsteuer (inkl. RC abziehbar) | {fmt(vst_in)} |")
-    out.append(f"| **= USt-Zahllast {year}** | **{fmt(ust_out - vst_in)}** |\n")
-    return "\n".join(out), gewinn, ust_out - vst_in
+    out.append(f"| USt geschuldet (Umsätze 19 % inkl. §13b/Reverse-Charge) | {fmt(ust_output)} |")
+    out.append(f"| − Vorsteuer (Rechnungsbasis, inkl. RC) | {fmt(ust_input)} |")
+    out.append(f"| **= USt-Zahllast {year}** | **{fmt(ust_zahllast)}** |\n")
+    return "\n".join(out), gewinn, ust_zahllast
 
 
 if __name__ == "__main__":
