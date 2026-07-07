@@ -1,0 +1,84 @@
+\documentclass[%
+business,
+DIV=10,
+fontsize=10pt,
+parskip=full-,
+twoside,
+pagenumber=botright,
+enlargefirstpage]{scrlttr2}
+
+\usepackage[english]{babel}
+\usepackage{ragged2e}
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\setmainfont{Roboto}
+
+\usepackage[table]{xcolor}
+
+\renewcommand*{\glqq}{\quotedblbase}
+\renewcommand*{\grqq}{\textquotedblleft}
+
+
+\setkomavar{myref}{ << invoice.number >> }
+\setkomavar{yourref}{ << invoice.po_number >> }
+\setkomavar{customer}{ << buyer.customer_number >> }
+\setkomavar{subject}{Payment Notice -- Invoice << invoice.number >> }
+
+\begin{document}
+	\begin{letter}{ << buyer.name >> \\
+			- << buyer_letter_contact >> - \\
+			<< buyer.street >> \\
+			<< buyer.zip >> << buyer.city >><% if buyer.country %> \\ << buyer.country >><% endif %> }
+
+		\opening{Dear Sir or Madam,}
+
+		We refer to our invoice \textbf{<< invoice.number >>} dated \textbf{<< invoice.issue_date | format_date_en >>}<% if invoice.service_period %> for services rendered during the period \textbf{<< invoice.service_period.start | format_date_en >>} to \textbf{<< invoice.service_period.end | format_date_en >>}<% endif %>.
+
+		The invoice amount of \textbf{EUR~<< gross_total >>} was due on \textbf{<< due_date | format_date_en >>} and remains outstanding<% if dunning_level > 1 %> despite our previous reminder<% endif %> as of today.
+
+<% if po_received_date %>
+		The services covered by this invoice were rendered on the basis of our established collaboration, continued work instructions, and technical direction -- constituting a valid contractual basis independent of any formal purchase order process. Invoice \textbf{<< invoice.number >>} is therefore fully valid as issued.
+
+		We acknowledge that a purchase order was received on \textbf{<< po_received_date | format_date_en >>}. This order is treated as a separate engagement for future services and does not affect the validity of or the payment obligation under invoice \textbf{<< invoice.number >>}.
+
+<% endif %>
+<% if final_days %>
+		We kindly ask you to transfer the outstanding amount within \textbf{<< final_days >> days} of the date of this notice (\textbf{no later than << final_deadline | format_date_en >>}) to our account.
+<% else %>
+		As a gesture of goodwill, we extend the payment deadline for invoice \textbf{<< invoice.number >>} to \textbf{<< final_deadline | format_date_en >>}. We kindly ask you to ensure that payment reaches our account by this date.
+<% endif %>
+
+		Should payment not be received by the above date, we reserve the right to initiate further legal steps without prior notice. Any costs thereby arising will be charged separately.
+
+<% if dunning_note %>
+		<< dunning_note | latex >>
+
+<% endif %>
+		\vspace{0.5em}
+
+		\begin{tabular}{p{12cm} r}
+			\textbf{Net amount} & << net_total >>\,EUR \\
+<% if tax.category == "AE" %>
+			VAT (0\,\%, Reverse Charge -- Art.\,196 VAT Directive) & << vat_amount >>\,EUR \\
+<% else %>
+			VAT (<< vat_rate_percent >>\,\%) & << vat_amount >>\,EUR \\
+<% endif %>
+			\textbf{Invoice amount} & \textbf{<< gross_total >>\,EUR} \\
+<% if not fees_suppressed %>
+			\hline
+			Default interest (Art.\,3 Directive 2011/7/EU; §\,288(2) BGB) & \textbf{<< delay_interest >>\,EUR} \\
+			Fixed recovery fee (Art.\,6 Directive 2011/7/EU; §\,288(5) BGB) & \textbf{<< default_compensation_fee >>\,EUR} \\
+<% endif %>
+			\hline
+			\textbf{Total outstanding} & \textbf{<< total_claim >>\,EUR} \\
+		\end{tabular}
+
+		Outstanding amount as of << date_today | format_date_en >>.<% if not fees_suppressed %> Further interest accrues until payment is received.<% endif %>
+
+		Please use the invoice number \textbf{<< invoice.number >>} as the payment reference.
+
+		\closing{Kind regards,}
+
+	\end{letter}
+
+\end{document}

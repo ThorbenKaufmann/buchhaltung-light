@@ -4,6 +4,8 @@ BHL Reporting CLI
 -----------------
 Beispiele:
     ./python/reporting/report.py --type ust --period 2025-10
+    ./python/reporting/report.py --type ust_2a --year 2024
+    ./python/reporting/report.py --type ust_2a --year 2024 --export md
     ./python/reporting/report.py --type ust --year 2025 --export md
     ./python/reporting/report.py --type guv --year 2025 --export csv
     ./python/reporting/report.py --type yearly --year 2025
@@ -21,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from reporting import ust, guv, afa
+from reporting import ust, guv, afa, ust_2a
 
 
 def fmt(df: pd.DataFrame) -> pd.DataFrame:
@@ -193,6 +195,7 @@ def main():
     parser.add_argument("--type",
     choices=[
         "ust",
+        "ust_2a",
         "guv",
         "guv_classified",
         "guv_grouped",
@@ -213,6 +216,17 @@ def main():
     parser.add_argument("--year", type=int, help="z.B. 2025")
     parser.add_argument("--export", choices=["md", "csv"], help="Exportformat")
     args = parser.parse_args()
+
+    if args.type == "ust_2a":
+        year = args.year or pd.Timestamp.now().year
+        md, _ = ust_2a.build(year)
+        if args.export == "md":
+            out = Path(f"report_ust_2a_{year}.md")
+            out.write_text(md, encoding="utf-8")
+            print(f"✅ Markdown-Report geschrieben: {out}")
+        else:
+            print(md)
+        return
 
     if args.type == "ust":
         rows = ust.fetch_ust_report(period=args.period, year=args.year)
