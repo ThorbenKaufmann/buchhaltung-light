@@ -33,11 +33,11 @@ enlargefirstpage]{scrlttr2}
 
 \begin{document}
 	%\RaggedRight %Rausatz? Sonst Blocksatz!
-	\begin{letter}{ << buyer.name >> \\ 
-			- << buyer.contact.person_name >> - \\ 
-			<< buyer.street >> \\ 
-			<< buyer.zip >> << buyer.city >> <% if buyer.state %>, << buyer.state >> <% endif %> \\
-            <% if buyer.country %><< buyer.country >><% endif %>
+	\begin{letter}{ << buyer.name | latex >> \\
+			- << buyer.contact.person_name | latex >> - \\
+			<< buyer.street | latex >> \\
+			<< buyer.zip >> << buyer.city | latex >> <% if buyer.state %>, << buyer.state | latex >> <% endif %> \\
+            <% if buyer.country %><< buyer.country | latex >><% endif %>
         }
 		
 		\opening{Dear Sir or Madam,}
@@ -52,7 +52,7 @@ enlargefirstpage]{scrlttr2}
                 \textbf{Pos.} & \textbf{ID} & \textbf{Description} & \textbf{Price} & \textbf{Unit} & \textbf{Cnt.} & \textbf{Tax} & \textbf{Netto} \\
                 \hline
                 <% for line in lines %>
-                << loop.index >> & << line.assigned_id >> & << line.name >> \par \scriptsize \textit{ << line.description >> } & << line.unit_price >> & << line.unit_code >> & << line.quantity >> & << line.tax.rate >> & << line.quantity * line.unit_price >> \\
+                << loop.index >> & << line.assigned_id | latex >> & << line.name | latex >> \par \scriptsize \textit{ << line.description | latex >> } & << line.unit_price | eur >> & << line.unit_code >> & << line.quantity >> & << line.tax.rate >> & << (line.quantity * line.unit_price) | eur >> \\
                 \hline
                 <% endfor %>
             \end{tabular}

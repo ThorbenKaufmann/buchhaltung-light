@@ -173,6 +173,7 @@ def render_tex(data, template_path, out_path):
         autoescape=False,
     )
     env.filters["latex"]         = latex_escape
+    env.filters["eur"]           = eur
     env.filters["format_date"]   = format_date
     env.filters["format_date_en"] = format_date_en
     template = env.get_template(template_path)

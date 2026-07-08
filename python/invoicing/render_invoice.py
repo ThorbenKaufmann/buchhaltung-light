@@ -139,6 +139,7 @@ def render_tex(data, template_path, out_path):
         autoescape=False,
     )
     env.filters["latex"] = latex_escape
+    env.filters["eur"]   = eur
     template = env.get_template(template_path)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(template.render(**data))

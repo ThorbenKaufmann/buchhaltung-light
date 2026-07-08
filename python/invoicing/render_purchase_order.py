@@ -94,7 +94,7 @@ def main(yaml_path, template_path):
 
     data = compute_data(data)
 
-    base     = os.path.splitext(os.path.basename(yaml_path))[0]  # e.g. poin_AN20260002
+    base     = os.path.splitext(os.path.basename(yaml_path))[0]  # e.g. po_BE20260001
     tex_path = f"{base}.tex"
 
     render_tex(data, template_path, tex_path)
@@ -103,7 +103,7 @@ def main(yaml_path, template_path):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: render_order_confirmation.py poin.yaml template.tex.j2")
+        print("usage: render_purchase_order.py po.yaml template.tex.j2")
         sys.exit(1)
 
     main(sys.argv[1], sys.argv[2])

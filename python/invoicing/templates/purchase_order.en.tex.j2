@@ -1,5 +1,5 @@
-% Beispiel-Brief
-% übersetzt mit lualatex
+% Purchase Order
+% compiled with lualatex
 
 \documentclass[%
 business,
@@ -12,10 +12,8 @@ enlargefirstpage]{scrlttr2}
 %\LoadLetterOption{business}
 %\LoadLetterOption{setcompany}%company1 erscheint als Name bei Rücksendeadresse
 
-%\usepackage[ngerman]{babel}
 \usepackage[english]{babel}
 \usepackage{ragged2e}%für Rausatz mit \RaggedRight
-\usepackage{blindtext,mwe}%für Demo
 \usepackage{fontspec}
 \usepackage{fontawesome5}
 \setmainfont{Roboto}
@@ -26,25 +24,25 @@ enlargefirstpage]{scrlttr2}
 \renewcommand*{\glqq}{\quotedblbase}
 \renewcommand*{\grqq}{\textquotedblleft}
 
-\setkomavar{date}{ << invoice.issue_date >> }
-\setkomavar{myref}{ << invoice.number >> }
-\setkomavar{yourref}{ << invoice.po_number>> }
-\setkomavar{customer}{ << buyer.customer_number >> }
-\setkomavar{subject}{Invoice << invoice.number >> }
+\setkomavar{date}{ << po.order_date >> }
+\setkomavar{myref}{ << po.number >> }
+\setkomavar{yourref}{ << po.quote_ref >> }
+\setkomavar{customer}{ << supplier.customer_number >> }
+\setkomavar{subject}{Purchase Order << po.number >> }
 
 \begin{document}
 	%\RaggedRight %Rausatz? Sonst Blocksatz!
-	\begin{letter}{ << buyer.name | latex >> \\
-			- << buyer.contact.person_name | latex >> - \\
-			<< buyer.street | latex >> \\
-			<< buyer.zip >> << buyer.city | latex >> <% if buyer.state %>, << buyer.state | latex >> <% endif %> \\
-            <% if buyer.country %><< buyer.country | latex >><% endif %>
+	\begin{letter}{ << supplier.name | latex >> \\
+			- << supplier.contact.person_name | latex >> - \\
+			<< supplier.street | latex >> \\
+			<< supplier.zip >> << supplier.city | latex >> <% if supplier.state %>, << supplier.state | latex >> <% endif %> \\
+            <% if supplier.country %><< supplier.country | latex >><% endif %>
         }
-		
+
 		\opening{Dear Sir or Madam,}
-		
-		According to your purchase order << invoice.po_number>>, we invoice the following services:
-        
+
+		we hereby place a binding order for the following items/services<% if po.quote_ref %> in accordance with your quote No.\ << po.quote_ref >><% endif %>:
+
         \begingroup
             \small
             \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}
@@ -65,20 +63,20 @@ enlargefirstpage]{scrlttr2}
             &    sales tax (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
             &    \textbf{total amount} & \textbf{<< gross_total >>\,€} \\
             \end{tabular}
-        
+
         \endgroup
 
-        Payable within << payment.terms_days >> days of invoice date without deductions.
-        <% if payment.discount %>
-        Discount: << payment.discount.percent >>\% within << payment.discount.days >> days of invoice date.
+        <% if po.delivery_date %>
+        Please deliver by << po.delivery_date >>.
         <% endif %>
-        <% if tax.category == "AE" %>
-        Reverse charge - VAT to be accounted for by the recipient. \\ Directive 2006/112/EC Art. 44 and 196. \\
-        \textbf{Customer VAT ID: << buyer.vat_id >>}
+        <% if po.delivery_address %>
+        Delivery address: << po.delivery_address | latex >>.
         <% endif %>
+        Please confirm this order quoting the purchase order number << po.number >>
+        and state it on all delivery notes and invoices.
         Thank you for your cooperation.
 		\closing{Kind Regards}
-		
+
 	\end{letter}
 
 \end{document}
