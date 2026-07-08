@@ -11,7 +11,7 @@ def fetch_ust_report(period=None, year=None):
     period: '2025-10' → Einzelmonat
     year: 2025 → Jahresreport
     """
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()      # RealDictCursor kommt automatisch
 
 

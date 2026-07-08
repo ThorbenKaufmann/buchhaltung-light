@@ -6,74 +6,27 @@ from db import get_connection
 
 
 def fetch_guv_report(year=None):
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
+    # Quelle: vw_guv_report (migriertes IST-Modell, deckungsgleich mit euer.py).
+    # direction outgoing = Einnahmen (revenue), incoming = Ausgaben (expense).
+    # Hinweis: incoming enthält auch Anlagenzugänge (Klasse 0) als Vollbetrag –
+    # dies ist eine grobe GuV-Übersicht, nicht der EÜR-Gewinn (dort nur AfA).
+    base = """
+            SELECT
+                DATE_TRUNC('month', periode) AS monat,
+                CASE WHEN direction = 'outgoing' THEN 'revenue' ELSE 'expense' END AS category,
+                SUM(netto_summe) AS netto_summe
+            FROM vw_guv_report
+            {where}
+            GROUP BY 1, 2
+            ORDER BY 1, 2;
+    """
     if year:
-        sql = """
-            SELECT
-                DATE_TRUNC('month', u.voucher_date) AS monat,
-
-                CASE
-                    WHEN a.is_revenue THEN 'revenue'
-                    WHEN a.is_expense THEN 'expense'
-                END AS category,
-
-                SUM(
-                    CASE
-                        WHEN a.is_revenue THEN -bl.amount
-                        WHEN a.is_expense THEN  bl.amount
-                        ELSE 0
-                    END
-                ) AS netto_summe
-
-            FROM booking_lines_new bl
-            JOIN unified_voucher_lines u
-              ON u.id = bl.source_id
-             AND u.type = bl.source_type
-
-            JOIN skr03_accounts a ON a.id = bl.account_skr
-
-            WHERE DATE_PART('year', u.voucher_date) = %s
-              AND (a.is_revenue OR a.is_expense)
-              AND a.is_internal = false
-
-            GROUP BY 1, 2
-            ORDER BY 1, 2;
-        """
-        cur.execute(sql, (year,))
+        cur.execute(base.format(where="WHERE DATE_PART('year', periode) = %s"), (year,))
     else:
-        sql = """
-            SELECT
-                DATE_TRUNC('month', u.voucher_date) AS monat,
-
-                CASE
-                    WHEN a.is_revenue THEN 'revenue'
-                    WHEN a.is_expense THEN 'expense'
-                END AS category,
-
-                SUM(
-                    CASE
-                        WHEN a.is_revenue THEN -bl.amount
-                        WHEN a.is_expense THEN  bl.amount
-                        ELSE 0
-                    END
-                ) AS netto_summe
-
-            FROM booking_lines_new bl
-            JOIN unified_voucher_lines u
-              ON u.id = bl.source_id
-             AND u.type = bl.source_type
-
-            JOIN skr03_accounts a ON a.id = bl.account_skr
-
-            WHERE (a.is_revenue OR a.is_expense)
-              AND a.is_internal = false
-
-            GROUP BY 1, 2
-            ORDER BY 1, 2;
-        """
-        cur.execute(sql)
+        cur.execute(base.format(where=""))
 
     rows = cur.fetchall()
     cur.close()
@@ -86,7 +39,7 @@ def fetch_guv_classified(year=None):
     Klassifizierte GuV: Ausgabe mit Soll/Haben und Bilanzgruppe.
     Quelle: vw_guv_classified
     """
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -132,7 +85,7 @@ def fetch_guv_grouped(year=None):
     Gruppierte GuV: Summen nach Bilanz-/GuV-Gruppe (aus account_groups).
     Quelle: vw_guv_grouped
     """
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -170,7 +123,7 @@ def fetch_guv_grouped(year=None):
 
 def fetch_guv_result(year=None):
     """GuV-Ergebnis: Ertrag, Aufwand, Gewinn/Verlust"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -194,7 +147,7 @@ def fetch_guv_result(year=None):
 
 def fetch_journal(year=None):
     """Buchungsjournal: alle Buchungen pro Jahr"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -217,7 +170,7 @@ def fetch_journal(year=None):
 
 def fetch_unclassified():
     """Nicht klassifizierte Konten anzeigen"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
     cur.execute("SELECT * FROM vw_unclassified_accounts ORDER BY account_skr;")
     rows = cur.fetchall()
@@ -228,7 +181,7 @@ def fetch_unclassified():
 
 def fetch_susa(year=None):
     """Summen- und Saldenliste"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -251,7 +204,7 @@ def fetch_susa(year=None):
 
 def fetch_susa_monthly(year=None):
     """Summen- und Saldenliste (monatsweise)"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:
@@ -282,7 +235,7 @@ def fetch_susa_monthly(year=None):
 
 def fetch_susa_cumulative(year=None):
     """Summen- und Saldenliste (kumuliert, monatsweise)"""
-    conn = get_connection()
+    conn = get_connection(dict_cursor=True)
     cur = conn.cursor()
 
     if year:

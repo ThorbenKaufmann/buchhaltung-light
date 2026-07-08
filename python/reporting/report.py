@@ -5,6 +5,7 @@ BHL Reporting CLI
 Beispiele:
     ./python/reporting/report.py --type ust --period 2025-10
     ./python/reporting/report.py --type ust_2a --year 2024
+    ./python/reporting/report.py --type gewst --year 2024
     ./python/reporting/report.py --type ust_2a --year 2024 --export md
     ./python/reporting/report.py --type ust --year 2025 --export md
     ./python/reporting/report.py --type guv --year 2025 --export csv
@@ -23,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from reporting import ust, guv, afa, ust_2a
+from reporting import ust, guv, afa, ust_2a, gewst
 
 
 def fmt(df: pd.DataFrame) -> pd.DataFrame:
@@ -86,8 +87,8 @@ def display(rows):
 
     df = pd.DataFrame(rows)
 
-    # Spaltennamen für GuV setzen (wichtig!)
-    if len(df.columns) == 3:
+    # Spaltennamen für GuV nur setzen, wenn Spalten unbenannt sind (Tupel-Fallback)
+    if list(df.columns) == [0, 1, 2]:
         df.columns = ["monat", "category", "netto_summe"]
     
     
@@ -120,10 +121,6 @@ def display(rows):
 
         except Exception as e:
             print(f"Pivot Fehler: {e}")
-
-    
-    df_pivot["result"] = df_pivot.get("revenue", 0) - df_pivot.get("expense", 0)
-    print(df_pivot)
 
     df = fmt(df)
 
@@ -163,16 +160,9 @@ def yearly_summary(year: int):
     ust_rows = ust.fetch_ust_report(year=year)
     guv_rows = guv.fetch_guv_report(year=year)
 
-    ust_sum = sum(float(r.get("zahlbetrag", 0)) for r in ust_rows)
-    guv_ertrag = sum(
-        float(r.get("netto_summe", 0))
-        for r in guv_rows if r.get("category") == "revenue"
-    )
-
-    guv_aufwand = sum(
-        float(r.get("netto_summe", 0))
-        for r in guv_rows if r.get("category") == "expense"
-    )
+    ust_sum = sum(float(r["zahlbetrag"] or 0) for r in ust_rows)
+    guv_ertrag = sum(float(r["netto_summe"] or 0) for r in guv_rows if r["category"] == "revenue")
+    guv_aufwand = sum(float(r["netto_summe"] or 0) for r in guv_rows if r["category"] == "expense")
         
     guv_ergebnis = guv_ertrag - guv_aufwand
 
@@ -196,6 +186,7 @@ def main():
     choices=[
         "ust",
         "ust_2a",
+        "gewst",
         "guv",
         "guv_classified",
         "guv_grouped",
@@ -217,11 +208,11 @@ def main():
     parser.add_argument("--export", choices=["md", "csv"], help="Exportformat")
     args = parser.parse_args()
 
-    if args.type == "ust_2a":
+    if args.type in ("ust_2a", "gewst"):
         year = args.year or pd.Timestamp.now().year
-        md, _ = ust_2a.build(year)
+        md = (ust_2a.build(year)[0] if args.type == "ust_2a" else gewst.build(year)[0])
         if args.export == "md":
-            out = Path(f"report_ust_2a_{year}.md")
+            out = Path(f"report_{args.type}_{year}.md")
             out.write_text(md, encoding="utf-8")
             print(f"✅ Markdown-Report geschrieben: {out}")
         else:
