@@ -13,3 +13,4 @@ PyYAML==6.0.3
 six==1.17.0
 tzdata==2025.2
 jinja2
+factur-x==4.3

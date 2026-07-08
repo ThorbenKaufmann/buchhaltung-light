@@ -119,7 +119,9 @@ def compute_data(data):
 # -----------------------------
 
 def render_xml(data, out_path):
-    env = Environment(loader=FileSystemLoader(os.path.dirname(FACTURX_TMPL)))
+    # autoescape=True: escape &, <, >, " in every {{ }} value so free-text
+    # fields (names, descriptions) can't produce malformed XML.
+    env = Environment(loader=FileSystemLoader(os.path.dirname(FACTURX_TMPL)), autoescape=True)
     env.filters["yyyymmdd"] = yyyymmdd
     template = env.get_template(os.path.basename(FACTURX_TMPL))
     with open(out_path, "w", encoding="utf-8") as f:
