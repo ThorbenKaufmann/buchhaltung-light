@@ -11,6 +11,13 @@ The templates use `fontspec`, so they compile **only** with `lualatex`
 (the `render_*.py` scripts call `lualatex --interaction=nonstopmode`).
 `pdflatex` will **not** work.
 
+**Minimum: TeX Live 2021** (known-good: TeX Live 2023). Older distributions
+ship outdated `fontspec`/`fontawesome5`/Roboto and fail to compile — an old
+TeX Live is a common cause of build errors on a fresh machine. Check with
+`lualatex --version`; on Debian/Ubuntu an apt TeX Live can lag well behind, so
+prefer the [upstream installer](https://tug.org/texlive/) if the packaged
+version is too old.
+
 Packages/fonts used by the templates and `business.lco`:
 `fontspec` + the **Roboto** font (`\setmainfont{Roboto}`), `fontawesome5`,
 `svg`, `graphicx`, `lastpage`, `xcolor`, `ragged2e`, `babel` (ngerman + english).
