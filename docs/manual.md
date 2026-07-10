@@ -335,6 +335,37 @@ python3 python/manage_auto_rules.py --add \
 
 ## 6. Reporting und Abschluss
 
+### Monatsabschluss auf einen Blick
+
+Der komplette Ablauf vom Bankimport bis zur UStVA. **Wichtig:**
+`rebuild_booking_lines.py` ist der *letzte* Schritt und muss laufen, *nachdem*
+der letzte Beleg gematcht und gebucht ist – sonst zeigt
+`report_tax_summary.py` veraltete Zahlen (siehe Kasten unten).
+
+```mermaid
+flowchart TD
+    A[Bankumsätze importieren<br/>import_commerzbank_csv.py / import_mt940.py] --> B[Buchungsregeln anwenden<br/>auto_assign_transactions.py]
+    B --> C[Belege importieren<br/>add_all_vouchers.py]
+    C --> D[Belege ⇄ Transaktionen matchen<br/>match_vouchers.py]
+    D --> E[Konten zuordnen / Belege verbuchen<br/>auto_assign_vouchers.py · assign_accounts.py]
+    E --> F{Alle Belege<br/>des Monats gebucht?}
+    F -- Nein --> C
+    F -- Ja --> G[**Buchungszeilen neu aufbauen**<br/>rebuild_booking_lines.py --month YYYY-MM]
+    G --> H[Steuerübersicht / UStVA<br/>report_tax_summary.py --month YYYY-MM]
+    H --> I[Zahlen an Elster übermitteln]
+
+    N[Nachträglich Beleg ergänzt<br/>oder korrigiert?] -. dann erneut .-> G
+```
+
+> ⚠️ **Zwei USt-Quellen, die auseinanderlaufen können.**
+> `report_tax_summary.py` liest aus der *abgeleiteten* Tabelle
+> `booking_lines_new` (Konten `1576` Vorsteuer / `1776` USt). Diese wird **nur**
+> durch `rebuild_booking_lines.py` aktualisiert. Die View `vw_ust_report` liest
+> dagegen live aus `voucher_lines`. Wird ein Beleg *nach* dem letzten Rebuild
+> gematcht, fehlt seine Vorsteuer im `report_tax_summary.py`, während
+> `vw_ust_report` schon stimmt. **Wenn beide USt-Werte abweichen: zuerst
+> `rebuild_booking_lines.py --month` erneut laufen lassen.**
+
 ### 6.1 Monatlicher Überblick
 
 ```bash
@@ -418,6 +449,10 @@ python3 python/revise_voucher.py --voucher-id <VID>
 ```bash
 python3 python/rebuild_booking_lines.py --month 2024-01
 ```
+
+Regeneriert `booking_lines_new` für den Monat aus den `voucher_lines`
+(idempotent: löscht + baut neu). Pflicht-Schritt am Ende jedes Monatsabschlusses
+und nach jeder nachträglichen Beleg-Änderung – siehe Flowgraph in Abschnitt 6.
 
 ### SKR03-Konten suchen
 
