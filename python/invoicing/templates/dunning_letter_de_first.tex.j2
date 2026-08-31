@@ -1,0 +1,78 @@
+\documentclass[%
+business,
+DIV=10,
+fontsize=10pt,
+parskip=full-,
+twoside,
+pagenumber=botright,
+enlargefirstpage]{scrlttr2}
+
+\usepackage[ngerman]{babel}
+\usepackage{ragged2e}
+\usepackage{fontspec}
+\usepackage{fontawesome5}
+\setmainfont{Roboto}
+
+\usepackage[table]{xcolor}
+
+\renewcommand*{\glqq}{\quotedblbase}
+\renewcommand*{\grqq}{\textquotedblleft}
+
+
+\setkomavar{myref}{ << invoice.number >> }
+\setkomavar{yourref}{ << invoice.po_number >> }
+\setkomavar{customer}{ << buyer.customer_number >> }
+\setkomavar{subject}{Zahlungserinnerung -- Rechnung << invoice.number >> }
+
+\begin{document}
+	\begin{letter}{ << buyer.name | latex >> \\
+			- << buyer_letter_contact | latex >> - \\
+			<< buyer.street | latex >> \\
+			<< buyer.zip >> << buyer.city | latex >><% if buyer.country %> \\ << buyer.country | latex >><% endif %> }
+
+		\opening{Sehr geehrte Damen und Herren,}
+
+		wir beziehen uns auf unsere Rechnung \textbf{<< invoice.number >>} vom \textbf{<< invoice.issue_date | format_date >>}<% if invoice.service_period %> über Leistungen im Zeitraum \textbf{<< invoice.service_period.start | format_date >>} bis \textbf{<< invoice.service_period.end | format_date >>}<% endif %>.
+
+		Der Rechnungsbetrag in Höhe von \textbf{<< gross_total >>\,€} war am \textbf{<< due_date | format_date >>} fällig und ist bis heute<% if dunning_level > 1 %> trotz unserer Zahlungserinnerung<% endif %> nicht ausgeglichen.
+
+<% if final_days %>
+		Wir bitten Sie, den offenen Betrag innerhalb von \textbf{<< final_days >> Tagen} nach Ausstellung dieses Schreibens (\textbf{spätestens zum << final_deadline | format_date >>}) auf unser Konto zu überweisen.
+<% else %>
+		Als Entgegenkommen verlängern wir die Zahlungsfrist für Rechnung \textbf{<< invoice.number >>} bis zum \textbf{<< final_deadline | format_date >>}. Wir bitten Sie, den Zahlungseingang auf unserem Konto bis zu diesem Datum sicherzustellen.
+<% endif %>
+
+		Sollte bis dahin kein Zahlungseingang erfolgt sein, behalten wir uns weitere Schritte vor. Die hierdurch entstehenden Kosten werden Ihnen gesondert berechnet.
+
+<% if dunning_note %>
+		<< dunning_note | latex >>
+
+<% endif %>
+		\vspace{0.5em}
+
+		\begin{tabular}{p{12cm} r}
+			\textbf{Nettobetrag} & << net_total >>\,€ \\
+<% if tax.category == "AE" %>
+			Umsatzsteuer (0\,\%, Reverse Charge -- Steuerschuldnerschaft des Leistungsempfängers, Art.\,196 MwStSystRL) & << vat_amount >>\,€ \\
+<% else %>
+			Umsatzsteuer (<< vat_rate_percent >>\,\%) & << vat_amount >>\,€ \\
+<% endif %>
+			\textbf{Rechnungsbetrag} & \textbf{<< gross_total >>\,€} \\
+<% if not fees_suppressed %>
+			\hline
+			Verzugszinsen (§\,288 Abs.\,2 BGB) & \textbf{<< delay_interest >>\,€} \\
+			Verzugspauschale (§\,288 Abs.\,5 BGB) & \textbf{<< default_compensation_fee >>\,€} \\
+<% endif %>
+			\hline
+			\textbf{Gesamtforderung} & \textbf{<< total_claim >>\,€} \\
+		\end{tabular}
+
+		Forderung berechnet zum << date_today | format_date >>.<% if not fees_suppressed %> Weitere Zinsen laufen bis zum Zahlungseingang.<% endif %>
+
+		Bitte geben Sie bei der Überweisung die Rechnungsnummer \textbf{<< invoice.number >>} als Verwendungszweck an.
+
+		\closing{Mit freundlichen Grüßen}
+
+	\end{letter}
+
+\end{document}

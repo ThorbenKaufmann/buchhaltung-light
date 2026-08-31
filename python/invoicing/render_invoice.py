@@ -8,7 +8,8 @@ from decimal import Decimal, ROUND_HALF_UP
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-BASE_RATE = Decimal("1.27")    # Basiszinssatz
+import basiszins
+
 DUNNING_DAYS = 7
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -90,13 +91,9 @@ def compute_data(data):
     days_in_delay = (today - due_date).days if today > due_date else 0
     data["days_in_delay"] = days_in_delay
 
-    if days_in_delay > 0:
-        interest_rate  = (BASE_RATE + Decimal("9.00")) / Decimal("100")
-        delay_interest = (
-            gross_total * interest_rate * Decimal(days_in_delay) / Decimal("365")
-        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    else:
-        delay_interest = Decimal("0.00")
+    # Verzugszinsen taggenau je Basiszins-Stufe (Bundesbank setzt zum 1.1./1.7. neu fest)
+    delay_interest, interest_periods = basiszins.delay_interest(gross_total, due_date, today)
+    data["interest_periods"] = interest_periods
 
     default_compensation_fee = Decimal("40.00")
     total_claim = (gross_total + delay_interest + default_compensation_fee).quantize(
