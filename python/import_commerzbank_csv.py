@@ -107,7 +107,15 @@ def import_commerzbank_csv(filename: str, account_id: int, dry_run: bool = False
 
         try:
             booking_date = parse_date(row["Buchungstag"])
-            value_date   = parse_date(row["Wertstellung"])
+            # Die Commerzbank liefert gelegentlich eine unmögliche Wertstellung
+            # (z. B. 30.02.) für Monatsend-Entgelte. Dann auf den Buchungstag
+            # zurückfallen, statt die ganze Zeile zu verwerfen.
+            try:
+                value_date = parse_date(row["Wertstellung"])
+            except ValueError:
+                print(f"  ⚠  Ungültige Wertstellung {row['Wertstellung'].strip()!r} "
+                      f"– verwende Buchungstag {booking_date}.")
+                value_date = booking_date
             amount       = parse_amount(row["Betrag"])
             currency     = (row.get("Währung") or "EUR").strip()
             counterpart  = extract_counterpart(buchungstext, umsatzart)

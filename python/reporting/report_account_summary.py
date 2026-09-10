@@ -79,10 +79,10 @@ def run_account_summary(month):
         elif is_exp:
             typ = "EXP"
             total_expense += summe
-        elif konto.startswith("17"):
+        elif konto.startswith("177"):
             typ = "USt"
             total_ust += summe
-        elif konto.startswith("15"):
+        elif konto.startswith("157"):
             typ = "VSt"
             total_vorsteuer += summe
         else:
