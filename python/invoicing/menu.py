@@ -7,6 +7,7 @@ through the existing scripts (quotes.py, scan_overdue.py, po_remaining.py,
 record_payment.py), so the command line keeps working the same way.
 """
 
+import calendar
 import contextlib
 import curses
 import io
@@ -17,8 +18,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import invoice_po
 import quotes
 import scan_overdue
+from po_remaining import analyse
 from scan_overdue import DATA_DIR, parse_date
 
 HERE = Path(__file__).parent
@@ -73,7 +76,7 @@ def ask_date(prompt, default):
 
 
 STATE_COLORS = {"open": 1, "lapsed": 2, "ordered": 3}
-HELP = " ↑↓/jk move   a accepted   e expired   r rejected   u reopen   f filter   q back "
+HELP = " ↑↓/jk move  i invoice  a accepted  e expired  r rejected  u reopen  f filter  q back "
 
 
 def prompt(scr, label, default=""):
@@ -178,6 +181,83 @@ def accept_quote(scr, row):
     return message
 
 
+def show_text(scr, text, question=None):
+    """Full-screen text with a y/N question at the bottom (or just Enter to go back)."""
+    scr.erase()
+    height, width = scr.getmaxyx()
+    for i, line in enumerate(text.splitlines()[:height - 3]):
+        attr = curses.color_pair(4) if line.startswith(("ERROR", "WARN")) else curses.A_NORMAL
+        scr.addstr(i, 0, line[:width - 1], attr)
+    if question is None:
+        prompt(scr, "Enter = back")
+        return False
+    return confirm(scr, question)
+
+
+def invoice_order(scr, row):
+    if row["state"] != "ordered":
+        return f"{row['number']} has no customer order yet (a: accepted)"
+    loaded = quiet(invoice_po.load_po, row["po"], DATA_DIR)
+    if isinstance(loaded, str):
+        return loaded
+    _, order, invoices = loaded
+    today = date.today()
+
+    default_start, _ = invoice_po.default_period(order, invoices, today)
+    start = prompt_date(scr, "Service period start", default_start)
+    if start is None:
+        return ""
+    month_end = start.replace(day=calendar.monthrange(start.year, start.month)[1])
+    end = prompt_date(scr, "Service period end (per timesheet)", month_end)
+    if end is None:
+        return ""
+    quantities = {}
+    for line in analyse(order, invoices)[0]:
+        while True:
+            value = prompt(scr, f"{line['id']} {line['name'][:40]} - {line['remaining']:,.2f} "
+                                f"{line['unit']} left, bill")
+            if value is None:
+                return ""
+            try:
+                quantities[line["id"]] = quiet(invoice_po.parse_qty, value or "0")
+                if isinstance(quantities[line["id"]], str):
+                    raise ValueError
+                break
+            except ValueError:
+                curses.beep()
+    issue_date = prompt_date(scr, "Invoice date", today)
+    if issue_date is None:
+        return ""
+    number = prompt(scr, "Invoice number", invoice_po.next_invoice_number(DATA_DIR, issue_date.year))
+    if not number:
+        return ""
+
+    args = (row["po"], quantities, DATA_DIR, start, end, issue_date, number)
+    result = quiet(invoice_po.create, *args, dry_run=True)
+    force = False
+    if isinstance(result, str):
+        if "--force" not in result or not show_text(scr, result, "Write anyway, ignoring the checks?"):
+            return result.splitlines()[0] if "--force" in result else result
+        force = True
+        result = quiet(invoice_po.create, *args, force=True, dry_run=True)
+        if isinstance(result, str):
+            return result
+    if not show_text(scr, result[0], f"Write {number}?"):
+        return ""
+    result = quiet(invoice_po.create, *args, force=force)
+    if isinstance(result, str):
+        return result
+    message, path = result
+    if confirm(scr, "Render PDF + Factur-X now?"):
+        scr.addstr(scr.getmaxyx()[0] - 2, 0, "Rendering (lualatex) ...")
+        scr.clrtoeol()
+        scr.refresh()
+        ok, out = invoice_po.render(path, order)
+        message += f"\n{path.stem}_x.pdf written" if ok else f"\nERROR: rendering failed\n{out}"
+    show_text(scr, message)
+    return f"{number} written ({path.name})"
+
+
 def browse_quotes(scr):
     curses.curs_set(0)
     curses.use_default_colors()
@@ -237,6 +317,8 @@ def browse_quotes(scr):
                 message = quiet(quotes.reopen, rows[pos]["number"], DATA_DIR)
         elif key == ord("a"):
             message = accept_quote(scr, rows[pos])
+        elif key == ord("i"):
+            message = invoice_order(scr, rows[pos])
 
 
 def quote_list():
@@ -282,7 +364,7 @@ def record_payment():
 
 
 ACTIONS = [
-    ("1", "Quotes: list, accept, expire, reject", quote_list),
+    ("1", "Quotes & orders: accept, invoice, expire, reject", quote_list),
     ("2", "Invoices: open items", lambda: page("scan_overdue.py", "--all")),
     ("3", "Customer POs: budget left", lambda: page("po_remaining.py")),
     ("4", "Record a payment", record_payment),

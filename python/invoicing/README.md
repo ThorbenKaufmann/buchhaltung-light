@@ -110,8 +110,11 @@ python3 quotes.py mark AN20260003 rejected --note "customer declined"
 python3 quotes.py reopen AN20260003  # undo a mark
 python3 quotes.py accept AN20260007 --po 5000225603 --order-date 2026-10-12
 
+# Invoice against a customer PO (checks: PO budget left, PO period, overlaps)
+python3 invoice_po.py 5000225603     --qty 1000=120.5 --period 2026-11-01..2026-11-27 --render
+
 # Menu (whiptail) over the scripts above; the quote list is interactive:
-# a accepted, e expired, r rejected, u reopen, f filter, q back
+# i invoice, a accepted, e expired, r rejected, u reopen, f filter, q back
 python3 menu.py
 ```
 
