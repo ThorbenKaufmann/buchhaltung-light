@@ -113,6 +113,12 @@ python3 quotes.py accept AN20260007 --po 5000225603 --order-date 2026-10-12
 # Invoice against a customer PO (checks: PO budget left, PO period, overlaps)
 python3 invoice_po.py 5000225603     --qty 1000=120.5 --period 2026-11-01..2026-11-27 --render
 
+# Time log against customer POs (data/time/YYYY-MM.tsv) and activity report PDF
+python3 timelog.py start "CAN driver bring-up" --po 5000225603   # stop: timelog.py stop
+python3 timelog.py add 2026-11-03 13:30-17:05 "Spec review" --po 5000225603
+python3 timelog.py list --from 2026-11-01 --to 2026-11-30       # internal: timestamps, gaps
+python3 timelog.py report --invoice RE20260005                  # PO + period from the invoice
+
 # Menu (whiptail) over the scripts above; the quote list is interactive:
 # i invoice, a accepted, e expired, r rejected, u reopen, f filter, q back
 python3 menu.py
@@ -131,6 +137,13 @@ confirmation, otherwise the order date is used.
 refuses duplicates and overpayments unless `--force`. It edits the file as
 text so comments survive. The accounting side — linking the bank transaction
 to the outgoing voucher — is still done in the bookkeeping DB.
+
+The time log keeps raw timestamps; rounding happens only in reports: each
+block is rounded up to 15 minutes (`--step`), but never past the start of the
+operator's next block, so seamless task switches are not billed twice. The
+activity report uses the company report layout (`config/latex/firmenbericht`,
+via `python/reporting/firmenlayout.py`), German for German buyers, English
+otherwise; operator codes resolve via `data/time/operators.yaml`.
 
 Data files live in `data/`, which is **git-ignored** (they contain real customer
 data), so no sample YAMLs ship with the repo — copy the field structure from an
