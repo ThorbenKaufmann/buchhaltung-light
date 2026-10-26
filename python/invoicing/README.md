@@ -96,7 +96,20 @@ python3 render_purchase_order.py     data/po_BE20260001.yaml      templates/purc
 
 # Dunning letter (takes the *invoice* YAML)
 python3 render_dunning.py            data/invoice_RE20260001.yaml templates/dunning_letter.tex.j2
+
+# Open items: list overdue invoices, then record a received payment
+python3 scan_overdue.py              # --all: also not yet due, --paid: also settled
+python3 record_payment.py RE20260002 --date 2026-09-18 --reference "Bank ref"
+
+# Customer PO: what is left, projected run-out, reorder alarm (exit code 2)
+python3 po_remaining.py              5000222104   # omit the PO to check all poin_*.yaml
 ```
+
+`record_payment.py` appends to a `payments:` block in the invoice YAML
+(`--amount` defaults to the open remainder; partial payments are fine) and
+refuses duplicates and overpayments unless `--force`. It edits the file as
+text so comments survive. The accounting side — linking the bank transaction
+to the outgoing voucher — is still done in the bookkeeping DB.
 
 Data files live in `data/`, which is **git-ignored** (they contain real customer
 data), so no sample YAMLs ship with the repo — copy the field structure from an
