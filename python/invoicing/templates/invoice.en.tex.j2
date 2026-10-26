@@ -44,7 +44,13 @@ enlargefirstpage]{scrlttr2}
 		\opening{Dear Sir or Madam,}
 		
 		According to your purchase order << invoice.po_number>>, we invoice the following services:
-        
+
+        <% if invoice.service_period %>
+        \textbf{Service period:} << invoice.service_period.start >> -- << invoice.service_period.end >>
+        <% elif invoice.service_date %>
+        \textbf{Date of service:} << invoice.service_date >>
+        <% endif %>
+
         \begingroup
             \small
             \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}

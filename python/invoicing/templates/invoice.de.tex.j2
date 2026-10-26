@@ -41,7 +41,13 @@ enlargefirstpage]{scrlttr2}
 		\opening{Sehr geehrte Damen und Herren,}
 		
 		Gemäß Vereinbarung berechnen wir die nachfolgend aufgeführten Leistungen:
-        
+
+        <% if invoice.service_period %>
+        \textbf{Leistungszeitraum:} << invoice.service_period.start >> -- << invoice.service_period.end >>
+        <% elif invoice.service_date %>
+        \textbf{Leistungsdatum:} << invoice.service_date >>
+        <% endif %>
+
         \begingroup
             \small
             \begin{tabular}{|c|c|p{7.0cm}|c|r|r|r|r|}

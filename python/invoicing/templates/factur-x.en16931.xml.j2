@@ -32,13 +32,7 @@
             <ram:SpecifiedTradeProduct>
                 <ram:SellerAssignedID>{{ line.assigned_id }}</ram:SellerAssignedID>
                 <ram:Name>{{ line.name }}</ram:Name>
-                <ram:Description>
-                    {{ line.description }}
-                    {% if invoice.service_period %}
-                    (Leistungszeitraum: {{ invoice.service_period.start }} - {{
-        invoice.service_period.end }})
-                    {% endif %}
-                </ram:Description>
+                <ram:Description>{{ line.description }}</ram:Description>
             </ram:SpecifiedTradeProduct>
 
             <!-- Agreement -->
@@ -160,6 +154,18 @@
                 <ram:CategoryCode>{{ tax.category }}</ram:CategoryCode>
                 <ram:RateApplicablePercent>{{ tax.rate }}</ram:RateApplicablePercent>
             </ram:ApplicableTradeTax>
+
+            {% if invoice.service_period %}
+            <!-- Invoicing period (BG-14) -->
+            <ram:BillingSpecifiedPeriod>
+                <ram:StartDateTime>
+                    <udt:DateTimeString format="102">{{ invoice.service_period.start | yyyymmdd }}</udt:DateTimeString>
+                </ram:StartDateTime>
+                <ram:EndDateTime>
+                    <udt:DateTimeString format="102">{{ invoice.service_period.end | yyyymmdd }}</udt:DateTimeString>
+                </ram:EndDateTime>
+            </ram:BillingSpecifiedPeriod>
+            {% endif %}
 
             <ram:SpecifiedTradePaymentTerms>
                 <ram:DueDateDateTime>
