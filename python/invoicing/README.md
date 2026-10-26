@@ -103,7 +103,19 @@ python3 record_payment.py RE20260002 --date 2026-09-18 --reference "Bank ref"
 
 # Customer PO: what is left, projected run-out, reorder alarm (exit code 2)
 python3 po_remaining.py              5000222104   # omit the PO to check all poin_*.yaml
+
+# Quotes: open / lapsed / ordered (with PO budget left), close one by hand
+python3 quotes.py                    # --all: also closed and fully invoiced
+python3 quotes.py mark AN20260003 rejected --note "customer declined"
+
+# Menu (whiptail) over the scripts above
+python3 menu.py
 ```
+
+A quote is *ordered* as soon as a `poin_*.yaml` references it
+(`purchase.quote`); `quotes.py mark` writes a top-level `status:` block
+(`rejected` / `expired`) into the quote YAML, edited as text like
+`record_payment.py`.
 
 `record_payment.py` appends to a `payments:` block in the invoice YAML
 (`--amount` defaults to the open remainder; partial payments are fine) and
