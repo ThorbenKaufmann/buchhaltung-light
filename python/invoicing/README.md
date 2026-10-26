@@ -112,6 +112,7 @@ python3 quotes.py accept AN20260007 --po 5000225603 --order-date 2026-10-12
 
 # Invoice against a customer PO (checks: PO budget left, PO period, overlaps)
 python3 invoice_po.py 5000225603     --qty 1000=120.5 --period 2026-11-01..2026-11-27 --render
+python3 invoice_po.py 5000225603     --from-timelog --period 2026-11-01..2026-11-27 --render
 
 # Time log against customer POs (data/time/YYYY-MM.tsv) and activity report PDF
 python3 timelog.py start "CAN driver bring-up" --po 5000225603   # stop: timelog.py stop
@@ -119,8 +120,9 @@ python3 timelog.py add 2026-11-03 13:30-17:05 "Spec review" --po 5000225603
 python3 timelog.py list --from 2026-11-01 --to 2026-11-30       # internal: timestamps, gaps
 python3 timelog.py report --invoice RE20260005                  # PO + period from the invoice
 
-# Menu (whiptail) over the scripts above; the quote list is interactive:
-# i invoice, a accepted, e expired, r rejected, u reopen, f filter, q back
+# Menu (whiptail) over the scripts above, with two interactive lists:
+#   time log:  s start, x stop, a add, e edit, d delete, ←→ day, t today
+#   quotes:    i invoice, a accepted, e expired, r rejected, u reopen, f filter
 python3 menu.py
 ```
 
@@ -144,6 +146,9 @@ operator's next block, so seamless task switches are not billed twice. The
 activity report uses the company report layout (`config/latex/firmenbericht`,
 via `python/reporting/firmenlayout.py`), German for German buyers, English
 otherwise; operator codes resolve via `data/time/operators.yaml`.
+`invoice_po.py --from-timelog` (and `i` in the menu, which pre-fills the
+hours) bills the not yet invoiced entries of the period and writes the
+invoice number into them, so a block can't be billed twice.
 
 Data files live in `data/`, which is **git-ignored** (they contain real customer
 data), so no sample YAMLs ship with the repo — copy the field structure from an

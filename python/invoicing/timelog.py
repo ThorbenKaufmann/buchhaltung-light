@@ -42,8 +42,6 @@ from scan_overdue import DATA_DIR, parse_date
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT / "python" / "reporting"))
-from firmenlayout import render  # noqa: E402
 
 # set by main() from --dir
 DIRS = {"data": DATA_DIR, "time": DATA_DIR / "time"}
@@ -123,24 +121,35 @@ def append(entry, time_dir=None):
     path.write_text(text + entry.line() + "\n", encoding="utf-8")
 
 
+def rewrite(entry, new):
+    """Replace the entry's line by `new` (None deletes it); a new month moves it to that file."""
+    lines = entry.path.read_text(encoding="utf-8").splitlines()
+    if new is not None and f"{new.day:%Y-%m}" == entry.path.stem:
+        lines[entry.lineno] = new.line()
+        new = None
+    else:
+        del lines[entry.lineno]
+    entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if new is not None:
+        append(new, entry.path.parent)
+
+
 def set_end(entry, end):
     """Fill in the end time of a running entry in place."""
-    lines = entry.path.read_text(encoding="utf-8").splitlines()
     entry.end = end
-    lines[entry.lineno] = entry.line()
-    entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    rewrite(entry, entry)
 
 
 def running(entries, op):
     return next((e for e in entries if e.op == op and e.end is None), None)
 
 
-def overlaps(entries, new):
+def overlaps(entries, new, skip=None):
     """Entries of the same operator that overlap `new` (open entries count until now)."""
     new_end = new.end or datetime.now().time()
     hits = []
     for e in entries:
-        if e.op != new.op or e.day != new.day:
+        if e.op != new.op or e.day != new.day or e is skip:
             continue
         end = e.end or (datetime.now().time() if e.day == date.today() else time(23, 59))
         if new.start < end and e.start < new_end:
@@ -185,58 +194,143 @@ def last_po(entries, op):
     return None
 
 
-def cmd_start(args):
+def checked_po(po, force):
+    po_number = resolve_po(po)
+    if po_number is None and not force:
+        sys.exit(f"ERROR: unknown PO '{po}' (no poin_*.yaml), use --force to log it anyway")
+    return po_number or po
+
+
+def checked_overlaps(entries, entry, force, skip=None):
+    hits = overlaps(entries, entry, skip)
+    if hits and not force:
+        msgs = []
+        for e in hits:
+            end = e.end.strftime("%H:%M") if e.end else "..."
+            msgs.append(f"ERROR: overlaps {e.day} {e.start:%H:%M}-{end} {e.task}")
+        sys.exit("\n".join(msgs) + "\nNothing written. Use --force if this is intended.")
+
+
+def parse_span(span):
+    first, sep, last = span.partition("-")
+    if not sep:
+        sys.exit(f"ERROR: expected HH:MM-HH:MM, got {span}")
+    try:
+        start, end = parse_time(first), parse_time(last)
+    except ValueError:
+        sys.exit(f"ERROR: expected HH:MM-HH:MM, got {span}")
+    if end <= start:
+        sys.exit(f"ERROR: end {end:%H:%M} is not after start {start:%H:%M}")
+    return start, end
+
+
+def start_timer(task, po=None, op=DEFAULT_OP, force=False):
+    """Start a timer, stopping the operator's running one. Returns a message."""
     entries = load_entries()
     now = datetime.now().replace(second=0, microsecond=0)
-    po = args.po or last_po(entries, args.op)
+    po = po or last_po(entries, op)
     if not po:
         sys.exit("ERROR: no PO given and none used before, use --po (or --po - for internal)")
-    po_number = resolve_po(po)
-    if po_number is None and not args.force:
-        sys.exit(f"ERROR: unknown PO '{po}' (no poin_*.yaml), use --force to log it anyway")
-    current = running(entries, args.op)
+    po = checked_po(po, force)
+    messages = []
+    current = running(entries, op)
     if current:
         if current.day != now.date():
-            sys.exit(f"ERROR: a timer from {current.day} is still running, stop it with --at first")
-        set_end(current, now.time())
-        print(f"stopped: {current.start:%H:%M}-{now:%H:%M} {current.task}")
-    entry = Entry(now.date(), now.time(), None, args.op, po_number or po, args.task)
+            sys.exit(f"ERROR: a timer from {current.day} is still running, stop it with an end time first")
+        if current.start == now.time():
+            rewrite(current, None)  # restarted within the same minute: replace it
+        else:
+            set_end(current, now.time())
+            messages.append(f"stopped: {current.start:%H:%M}-{now:%H:%M} {current.task}")
+    entry = Entry(now.date(), now.time(), None, op, po, task)
     append(entry)
-    print(f"started: {now:%H:%M} {entry.op} {entry.po} {entry.task}")
+    messages.append(f"started: {now:%H:%M} {entry.op} {entry.po} {entry.task}")
+    return "\n".join(messages)
 
 
-def cmd_stop(args):
-    entries = load_entries()
-    current = running(entries, args.op)
+def stop_timer(op=DEFAULT_OP, at=None):
+    current = running(load_entries(), op)
     if current is None:
-        sys.exit(f"ERROR: no timer running for {args.op}")
-    end = parse_time(args.at) if args.at else datetime.now().time().replace(second=0, microsecond=0)
+        sys.exit(f"ERROR: no timer running for {op}")
+    end = at or datetime.now().time().replace(second=0, microsecond=0)
     if end <= current.start:
         sys.exit(f"ERROR: end {end:%H:%M} is not after start {current.start:%H:%M}")
     set_end(current, end)
-    print(f"stopped: {current.day} {current.start:%H:%M}-{end:%H:%M} ({current.minutes} min) {current.task}")
+    return f"stopped: {current.day} {current.start:%H:%M}-{end:%H:%M} ({current.minutes} min) {current.task}"
+
+
+def add_entry(day, start, end, task, po, op=DEFAULT_OP, force=False):
+    entry = Entry(day, start, end, op, checked_po(po, force), task)
+    checked_overlaps(load_entries(), entry, force)
+    append(entry)
+    return (f"added: {entry.day} {entry.start:%H:%M}-{entry.end:%H:%M} ({entry.minutes} min) "
+            f"{entry.op} {entry.po} {entry.task}")
+
+
+def edit_entry(entry, start, end, task, po, force=False):
+    """Change times, task or PO of an entry (end None keeps a timer running)."""
+    if entry.invoice and not force:
+        sys.exit(f"ERROR: entry is billed on {entry.invoice}, use --force to change it")
+    if end is not None and end <= start:
+        sys.exit(f"ERROR: end {end:%H:%M} is not after start {start:%H:%M}")
+    new = Entry(entry.day, start, end, entry.op, checked_po(po, force), task, entry.invoice)
+    entries = load_entries()
+    current = next((e for e in entries if e.path == entry.path and e.lineno == entry.lineno), None)
+    checked_overlaps(entries, new, force, skip=current)
+    rewrite(entry, new)
+    end_str = end.strftime("%H:%M") if end else "..."
+    return f"changed: {new.day} {new.start:%H:%M}-{end_str} {new.po} {new.task}"
+
+
+def delete_entry(entry, force=False):
+    if entry.invoice and not force:
+        sys.exit(f"ERROR: entry is billed on {entry.invoice}, use --force to delete it")
+    rewrite(entry, None)
+    return f"deleted: {entry.day} {entry.start:%H:%M} {entry.task}"
+
+
+def unbilled(po_number, first, last, entries):
+    """Entries of a PO in a period that are not on an invoice yet; refuses running timers."""
+    rows = [e for e in entries if e.po == po_number and first <= e.day <= last and not e.invoice]
+    for e in rows:
+        if e.end is None:
+            sys.exit(f"ERROR: timer still running on {e.day} {e.start:%H:%M} ({e.task}), stop it first")
+    return rows
+
+
+def billable_hours(po_number, first, last, step=DEFAULT_STEP, time_dir=None):
+    """(hours, entries) not billed yet for a PO and period, rounded as in the report."""
+    entries = load_entries(time_dir)
+    rounded = billed_minutes(entries, step)
+    rows = unbilled(po_number, first, last, entries)
+    return hours(sum(rounded[id(e)] for e in rows)), rows
+
+
+def mark_invoiced(rows, number):
+    """Write the invoice number into the given entries."""
+    by_path = {}
+    for e in rows:
+        by_path.setdefault(e.path, []).append(e)
+    for path, items in by_path.items():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for e in items:
+            e.invoice = number
+            lines[e.lineno] = e.line()
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return len(rows)
+
+
+def cmd_start(args):
+    print(start_timer(args.task, args.po, args.op, args.force))
+
+
+def cmd_stop(args):
+    print(stop_timer(args.op, parse_time(args.at) if args.at else None))
 
 
 def cmd_add(args):
-    first, sep, last = args.span.partition("-")
-    if not sep:
-        sys.exit(f"ERROR: expected HH:MM-HH:MM, got {args.span}")
-    entry = Entry(parse_day(args.day), parse_time(first), parse_time(last), args.op, args.po, args.task)
-    if entry.end <= entry.start:
-        sys.exit(f"ERROR: end {entry.end:%H:%M} is not after start {entry.start:%H:%M}")
-    po_number = resolve_po(args.po)
-    if po_number is None and not args.force:
-        sys.exit(f"ERROR: unknown PO '{args.po}' (no poin_*.yaml), use --force to log it anyway")
-    entry.po = po_number or args.po
-    hits = overlaps(load_entries(), entry)
-    if hits and not args.force:
-        for e in hits:
-            end = e.end.strftime("%H:%M") if e.end else "..."
-            print(f"ERROR: overlaps {e.day} {e.start:%H:%M}-{end} {e.task}", file=sys.stderr)
-        sys.exit("Nothing written. Use --force if this is intended.")
-    append(entry)
-    print(f"added: {entry.day} {entry.start:%H:%M}-{entry.end:%H:%M} ({entry.minutes} min) "
-          f"{entry.op} {entry.po} {entry.task}")
+    start, end = parse_span(args.span)
+    print(add_entry(parse_day(args.day), start, end, args.task, args.po, args.op, args.force))
 
 
 def cmd_list(args):
@@ -301,7 +395,7 @@ def latex(s):
     return s
 
 
-def report_data(po_number, first, last, step, time_dir=None):
+def report_data(po_number, first, last, step, time_dir=None, invoice=None):
     """{operator: [(day, [tasks], minutes)]} for billable entries of one PO and period."""
     entries = load_entries(time_dir)
     rounded = billed_minutes(entries, step)
@@ -309,6 +403,8 @@ def report_data(po_number, first, last, step, time_dir=None):
     for e in entries:
         if e.po != po_number or not first <= e.day <= last:
             continue
+        if e.invoice and e.invoice != invoice:
+            continue  # billed on another invoice
         if e.end is None:
             sys.exit(f"ERROR: timer still running on {e.day} {e.start:%H:%M} ({e.task}), stop it first")
         tasks, minutes = days.setdefault(e.op, {}).setdefault(e.day, ([], [0]))
@@ -319,12 +415,14 @@ def report_data(po_number, first, last, step, time_dir=None):
 
 
 def build_report(po_key, first, last, invoice=None, step=DEFAULT_STEP, draft=False, out_dir=HERE):
+    sys.path.insert(0, str(ROOT / "python" / "reporting"))
+    from firmenlayout import render  # company report layout, only needed here
     found = find_order(load_orders(DIRS["data"]), po_key)
     if found is None:
         sys.exit(f"ERROR: no customer order for '{po_key}'")
     order = found[1]
     po_number = str(order["purchase"]["po_number"])
-    data = report_data(po_number, first, last, step)
+    data = report_data(po_number, first, last, step, invoice=invoice)
     if not data:
         sys.exit(f"ERROR: no billable entries for PO {po_number} in {first} .. {last}")
 

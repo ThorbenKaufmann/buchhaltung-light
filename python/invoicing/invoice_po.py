@@ -13,9 +13,14 @@ is the next free RE<year><nnnn>. Refused unless --force: billing more than is
 left on a PO line, a period outside the PO period, a period overlapping an
 earlier invoice on this PO.
 
+--from-timelog takes the hours from timelog.py: the not yet billed entries of
+this PO in the period, rounded as in the activity report, go onto the hourly
+line, and those entries get the invoice number so they can't be billed twice.
+
 Examples:
   python3 invoice_po.py 5000225603 --qty 1000=120.5 --dry-run
   python3 invoice_po.py 5000225603 --qty 1000=120.5 --period 2026-11-01..2026-11-27 --render
+  python3 invoice_po.py 5000225603 --from-timelog --period 2026-11-01..2026-11-27 --render
 """
 
 import argparse
@@ -30,6 +35,7 @@ from pathlib import Path
 
 import yaml
 
+import timelog
 from po_remaining import analyse, find_order, load_invoices, load_orders, load_yaml
 from quotes import block_range, drop_status
 from scan_overdue import DATA_DIR, parse_date
@@ -82,6 +88,13 @@ def next_invoice_number(data_dir, year):
         if m:
             numbers.append(int(m.group(1)))
     return f"RE{year}{max(numbers, default=0) + 1:04d}"
+
+
+def hour_line(order):
+    """assigned_id of the single hourly PO line (unit HUR), or None."""
+    ids = [str(l["assigned_id"]) for l in order.get("lines", [])
+           if l.get("unit_code") == "HUR" and Decimal(str(l["quantity"])) != 0]
+    return ids[0] if len(ids) == 1 else None
 
 
 def template_for(order):
@@ -228,8 +241,12 @@ def next_steps(order, number, end):
 
 
 def create(key, quantities, data_dir, start=None, end=None, issue_date=None, number=None,
-           force=False, dry_run=False):
-    """Write the invoice YAML. Returns (message, path); raises SystemExit on refusal."""
+           force=False, dry_run=False, mark_timelog=False):
+    """Write the invoice YAML. Returns (message, path); raises SystemExit on refusal.
+
+    mark_timelog: write the invoice number into the time log entries of this PO
+    and period that are not billed yet.
+    """
     order_path, order, invoices = load_po(key, data_dir)
     issue_date = issue_date or date.today()
     default_start, default_end = default_period(order, invoices, issue_date)
@@ -247,11 +264,18 @@ def create(key, quantities, data_dir, start=None, end=None, issue_date=None, num
     if yaml.safe_load(new_text) != expected_data(order, number, issue_date, start, end, quantities):
         sys.exit("ERROR: YAML edit did not verify, nothing written. Please create the invoice by hand.")
 
+    rows = []
+    if mark_timelog:
+        _, rows = timelog.billable_hours(str(order["purchase"]["po_number"]), start, end,
+                                         time_dir=data_dir / "time")
     message = summary(order, invoices, quantities, number, start, end)
     message += "".join(f"\nWARN: {p}" for p in problems)
     if dry_run:
-        return f"{message}\n[dry-run] would write {target.name}", target
+        marks = f", mark {len(rows)} time log entries" if rows else ""
+        return f"{message}\n[dry-run] would write {target.name}{marks}", target
     target.write_text(new_text, encoding="utf-8")
+    if rows:
+        message += f"\nTime log: {timelog.mark_invoiced(rows, number)} entries marked {number}"
     return f"{message}\nWrote {target.name}\n{next_steps(order, number, end)}", target
 
 
@@ -274,6 +298,8 @@ def main():
                     help="service period, default day after the last invoice .. end of that month")
     ap.add_argument("--date", help="invoice date (YYYY-MM-DD), default today")
     ap.add_argument("--number", help="invoice number, default the next RE<year><nnnn>")
+    ap.add_argument("--from-timelog", action="store_true",
+                    help="bill the not yet billed time log hours of the period on the hourly line")
     ap.add_argument("--render", action="store_true", help="render PDF + Factur-X right away")
     ap.add_argument("--force", action="store_true", help="write despite the checks")
     ap.add_argument("--dry-run", action="store_true", help="show the result, don't write")
@@ -297,9 +323,24 @@ def main():
             sys.exit(f"ERROR: --period expects START..END, got {args.period}")
         start, end = parse_date(first), parse_date(last)
 
-    message, path = create(args.po, quantities, data_dir, start, end,
-                           parse_date(args.date) if args.date else None, args.number,
-                           args.force, args.dry_run)
+    issue_date = parse_date(args.date) if args.date else None
+    if args.from_timelog:
+        _, _, invoices = load_po(args.po, data_dir)
+        if start is None:
+            start, end = default_period(order, invoices, issue_date or date.today())
+        line_id = hour_line(order)
+        if line_id is None:
+            sys.exit("ERROR: --from-timelog needs exactly one hourly (HUR) line on the PO, use --qty")
+        hours, rows = timelog.billable_hours(str(order["purchase"]["po_number"]), start, end,
+                                             time_dir=data_dir / "time")
+        if any(item.startswith(f"{line_id}=") for item in args.qty):
+            print(f"WARN: --qty for {line_id} overrides the time log ({hours} h)", file=sys.stderr)
+        else:
+            quantities[line_id] = hours
+        print(f"Time log: {len(rows)} entries, {hours} h billable in {start} .. {end}")
+
+    message, path = create(args.po, quantities, data_dir, start, end, issue_date, args.number,
+                           args.force, args.dry_run, mark_timelog=args.from_timelog)
     print(message)
     if args.render and not args.dry_run:
         ok, out = render(path, order)
