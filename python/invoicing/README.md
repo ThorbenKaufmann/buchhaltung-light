@@ -107,15 +107,21 @@ python3 po_remaining.py              5000222104   # omit the PO to check all poi
 # Quotes: open / lapsed / ordered (with PO budget left), close one by hand
 python3 quotes.py                    # --all: also closed and fully invoiced
 python3 quotes.py mark AN20260003 rejected --note "customer declined"
+python3 quotes.py reopen AN20260003  # undo a mark
+python3 quotes.py accept AN20260007 --po 5000225603 --order-date 2026-10-12
 
-# Menu (whiptail) over the scripts above
+# Menu (whiptail) over the scripts above; the quote list is interactive:
+# a accepted, e expired, r rejected, u reopen, f filter, q back
 python3 menu.py
 ```
 
 A quote is *ordered* as soon as a `poin_*.yaml` references it
 (`purchase.quote`); `quotes.py mark` writes a top-level `status:` block
 (`rejected` / `expired`) into the quote YAML, edited as text like
-`record_payment.py`.
+`record_payment.py`. `quotes.py accept` writes the `poin_*.yaml` (the quote
+plus a `purchase:` block, next free `PI<year><nnnn>`); an optional
+`purchase.confirmation_date` becomes the letter date of the order
+confirmation, otherwise the order date is used.
 
 `record_payment.py` appends to a `payments:` block in the invoice YAML
 (`--amount` defaults to the open remainder; partial payments are fine) and
