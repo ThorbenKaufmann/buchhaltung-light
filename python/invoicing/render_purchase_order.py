@@ -78,32 +78,38 @@ def compile_pdf(tex_path):
     env["TEXINPUTS"] = f"{os.path.abspath(LCO_DIR)}:"
     for _ in range(2):
         result = subprocess.run(
-            ["lualatex", "--interaction=nonstopmode", tex_path],
+            ["lualatex", "--interaction=nonstopmode",
+             f"--output-directory={os.path.dirname(tex_path) or '.'}", tex_path],
             env=env, capture_output=True, text=True,
         )
         if result.returncode != 0:
             print(result.stdout[-3000:])
             sys.exit(result.returncode)
+    # LaTeX auxiliaries are only kept when the run fails (the .log explains why)
+    for ext in (".aux", ".log", ".out"):
+        aux = os.path.splitext(tex_path)[0] + ext
+        if os.path.exists(aux):
+            os.remove(aux)
     pdf_path = tex_path.replace(".tex", ".pdf")
     print(f"Wrote {pdf_path}")
 
 
-def main(yaml_path, template_path):
+def main(yaml_path, template_path, out_dir="."):
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
 
     data = compute_data(data)
 
     base     = os.path.splitext(os.path.basename(yaml_path))[0]  # e.g. po_BE20260001
-    tex_path = f"{base}.tex"
+    tex_path = os.path.join(out_dir, f"{base}.tex")
 
     render_tex(data, template_path, tex_path)
     compile_pdf(tex_path)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("usage: render_purchase_order.py po.yaml template.tex.j2")
+    if len(sys.argv) not in (3, 4):
+        print("usage: render_purchase_order.py po.yaml template.tex.j2 [out_dir]")
         sys.exit(1)
 
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:])

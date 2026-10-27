@@ -25,7 +25,7 @@ import quotes
 import scan_overdue
 import timelog
 from po_remaining import analyse
-from scan_overdue import DATA_DIR, parse_date
+from scan_overdue import DATA_DIR, output_dir, parse_date
 
 HERE = Path(__file__).parent
 TITLE = "ITC Embedded - invoicing"
@@ -179,7 +179,7 @@ def accept_quote(scr, row):
         scr.clrtoeol()
         scr.refresh()
         rc, out = run_script("render_order_confirmation.py", str(target),
-                             "templates/order_confirmation.en.tex.j2")
+                             "templates/order_confirmation.en.tex.j2", str(output_dir(DATA_DIR)))
         pdf = target.stem + ".pdf"
         message += f", {pdf} written" if rc == 0 else f", rendering failed: {out.splitlines()[-1:]}"
     return message
@@ -273,7 +273,8 @@ def invoice_order(scr, row):
         scr.addstr(scr.getmaxyx()[0] - 2, 0, "Rendering activity report ...")
         scr.clrtoeol()
         scr.refresh()
-        report = quiet(timelog.build_report, row["po"], start, end, number)
+        report = quiet(timelog.build_report, row["po"], start, end, number,
+                       out_dir=output_dir(DATA_DIR))
         message += f"\n{report}" if isinstance(report, str) else f"\n{report[0].name} written ({report[1]} h)"
     show_text(scr, message)
     return f"{number} written ({path.name})"

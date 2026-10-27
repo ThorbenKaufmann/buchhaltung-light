@@ -79,7 +79,9 @@ komavars at it — note `*.pdf` is git-ignored, so share logo files out-of-band.
 ## Usage
 
 Run the scripts **from this directory** (`python/invoicing/`). Each takes a YAML
-data file and a template; output files are written to the current directory.
+data file, a template and optionally an output directory (default: the current
+directory). LaTeX's `.aux`/`.log` files are removed after a successful run and
+kept when it fails.
 
 ```bash
 # Invoice (also writes <base>.xml and <base>_x.pdf with embedded Factur-X)
@@ -128,8 +130,9 @@ python3 menu.py --dir /tmp/demo/data                            # on a copy (dem
 ```
 
 With `--dir` the menu reads and writes only that data directory (title shows
-`[data: <name>]`); rendered PDFs still land next to the scripts, as on the
-command line.
+`[data: <name>]`). PDFs rendered from the real `data/` land next to the scripts;
+with any other `--dir` (menu, `invoice_po.py`, `timelog.py`) they go into that
+data directory, so a demo copy never overwrites real documents.
 
 A quote is *ordered* as soon as a `poin_*.yaml` references it
 (`purchase.quote`); `quotes.py mark` writes a top-level `status:` block

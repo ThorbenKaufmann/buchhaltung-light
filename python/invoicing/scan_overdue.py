@@ -18,6 +18,13 @@ import yaml
 DATA_DIR = Path(__file__).parent / "data"
 
 
+def output_dir(data_dir):
+    """Where rendered PDFs go: next to the scripts for the real data, into the
+    data directory itself for any other one (a copy for a demo or a test)."""
+    data_dir = Path(data_dir).resolve()
+    return DATA_DIR.parent if data_dir == DATA_DIR.resolve() else data_dir
+
+
 def parse_date(value):
     if isinstance(value, date):
         return value

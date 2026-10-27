@@ -30,6 +30,7 @@ import argparse
 import math
 import shutil
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -38,7 +39,7 @@ from pathlib import Path
 import yaml
 
 from po_remaining import find_order, load_orders, load_yaml
-from scan_overdue import DATA_DIR, parse_date
+from scan_overdue import DATA_DIR, output_dir, parse_date
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[1]
@@ -467,8 +468,8 @@ def build_report(po_key, first, last, invoice=None, step=DEFAULT_STEP, draft=Fal
     md += [f"\\textcolor{{graytext}}{{\\small {t['note']}}}", ""]
 
     stem = f"timesheet_{invoice}" if invoice else f"timesheet_{po_number}_{first:%Y%m%d}_{last:%Y%m%d}"
-    build = HERE / "build"
-    build.mkdir(exist_ok=True)
+    # build in a scratch directory; it is only left behind when LaTeX fails
+    build = Path(tempfile.mkdtemp(prefix=f"{stem}_"))
     md_file = build / f"{stem}.md"
     md_file.write_text("\n".join(md), encoding="utf-8")
     op_names = "\\newline ".join(latex(names.get(op, op)) for op in data)
@@ -486,6 +487,7 @@ def build_report(po_key, first, last, invoice=None, step=DEFAULT_STEP, draft=Fal
            verzeichnis=False, eigene_deckblattseite=False)
     target = out_dir / f"{stem}.pdf"
     shutil.copyfile(build / f"{stem}.pdf", target)
+    shutil.rmtree(build)
     return target, hours(total)
 
 
@@ -509,7 +511,8 @@ def cmd_report(args):
     if not po_key or not (invoice_number or args.period):
         sys.exit("ERROR: give a PO with --period, or --invoice")
 
-    target, total = build_report(po_key, first, last, invoice_number, args.step, args.draft)
+    target, total = build_report(po_key, first, last, invoice_number, args.step, args.draft,
+                                 output_dir(DIRS["data"]))
     print(f"Wrote {target.name}: {total} h")
     if invoice_number:
         billed = sum((Decimal(str(l["quantity"])) for l in inv.get("lines", [])

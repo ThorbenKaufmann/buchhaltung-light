@@ -38,7 +38,7 @@ import yaml
 import timelog
 from po_remaining import analyse, find_order, load_invoices, load_orders, load_yaml
 from quotes import block_range, drop_status
-from scan_overdue import DATA_DIR, parse_date
+from scan_overdue import DATA_DIR, output_dir, parse_date
 
 HERE = Path(__file__).parent
 
@@ -281,7 +281,8 @@ def create(key, quantities, data_dir, start=None, end=None, issue_date=None, num
 
 def render(path, order):
     """Run render_invoice.py (PDF + Factur-X). Returns (ok, output)."""
-    res = subprocess.run([sys.executable, "render_invoice.py", str(path), template_for(order)],
+    res = subprocess.run([sys.executable, "render_invoice.py", str(path), template_for(order),
+                          str(output_dir(path.parent))],
                          cwd=HERE, capture_output=True, text=True)
     return res.returncode == 0, (res.stdout + res.stderr).strip()
 
