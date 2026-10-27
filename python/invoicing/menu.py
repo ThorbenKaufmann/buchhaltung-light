@@ -4,7 +4,7 @@
 Uses whiptail for the dialogs, less for the reports and a curses list for the
 quotes (hotkeys to accept, expire, reject and reopen); every action goes
 through the existing scripts (quotes.py, scan_overdue.py, po_remaining.py,
-record_payment.py), so the command line keeps working the same way.
+record_payment.py, mail_invoice.py), so the command line keeps working the same way.
 --dir points the menu at another data directory (e.g. a copy for a demo).
 """
 
@@ -530,12 +530,38 @@ def record_payment():
         msgbox(run_script(*args)[1])
 
 
+def mail_invoice():
+    today = date.today()
+    with contextlib.redirect_stderr(io.StringIO()):
+        rows = sorted(scan_overdue.collect(DATA_DIR, today), key=lambda r: r["number"], reverse=True)
+    if not rows:
+        msgbox("No invoices.")
+        return
+    items = []
+    for r in rows:
+        state = "paid" if r["open"] <= 0 else f"open {r['open']:>11,.2f}"
+        items += [r["number"], f"{r['buyer'][:28]:<28} {r['gross']:>11,.2f}  {state}"]
+    ok, number = whiptail("--menu", "Mail which invoice (Thunderbird)?", str(len(rows)), *items)
+    if not ok:
+        return
+    args = ["mail_invoice.py", number, "--dir", str(DATA_DIR)]
+    rc, out = run_script(*args, "--dry-run")
+    if rc != 0:
+        msgbox(out)
+        return
+    ok, _ = whiptail("--yesno", out + "\n\nOpen this in Thunderbird? (nothing is sent)",
+                     opts=["--scrolltext"])
+    if ok:
+        msgbox(run_script(*args)[1].splitlines()[-1])
+
+
 ACTIONS = [
     ("1", "Time log: start/stop, add, edit", time_log),
     ("2", "Quotes & orders: accept, invoice, expire, reject", quote_list),
     ("3", "Invoices: open items", lambda: page("scan_overdue.py", "--all", "--dir", str(DATA_DIR))),
     ("4", "Customer POs: budget left", lambda: page("po_remaining.py", "--dir", str(DATA_DIR))),
     ("5", "Record a payment", record_payment),
+    ("6", "Mail an invoice (Thunderbird)", mail_invoice),
 ]
 
 

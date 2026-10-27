@@ -122,9 +122,14 @@ python3 timelog.py add 2026-11-03 13:30-17:05 "Spec review" --po 5000225603
 python3 timelog.py list --from 2026-11-01 --to 2026-11-30       # internal: timestamps, gaps
 python3 timelog.py report --invoice RE20260005                  # PO + period from the invoice
 
+# Thunderbird compose window for an invoice (To: purchaser, Cc: project lead,
+# attachments _x.pdf + activity report); nothing is sent automatically
+python3 mail_invoice.py RE20260005 --dry-run
+
 # Menu (whiptail) over the scripts above, with two interactive lists:
 #   time log:  s start, x stop, a add, e edit, d delete, ←→ day, t today
 #   quotes:    i invoice, a accepted, e expired, r rejected, u reopen, f filter
+#   6 mails an invoice through mail_invoice.py
 python3 menu.py
 python3 menu.py --dir /tmp/demo/data                            # on a copy (demo, tests)
 ```
