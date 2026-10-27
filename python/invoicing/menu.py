@@ -5,8 +5,10 @@ Uses whiptail for the dialogs, less for the reports and a curses list for the
 quotes (hotkeys to accept, expire, reject and reopen); every action goes
 through the existing scripts (quotes.py, scan_overdue.py, po_remaining.py,
 record_payment.py), so the command line keeps working the same way.
+--dir points the menu at another data directory (e.g. a copy for a demo).
 """
 
+import argparse
 import calendar
 import contextlib
 import curses
@@ -41,7 +43,8 @@ def whiptail(box, text, *rest, opts=()):
     size = [str(min(rows - 2, 30)), str(min(cols - 4, 110))]
     # whiptail draws on the terminal and writes the answer to stderr
     env = {"NEWT_COLORS": DARK, **os.environ}
-    res = subprocess.run(["whiptail", "--title", TITLE, *opts, box, text, *size, *rest],
+    title = TITLE if DATA_DIR == scan_overdue.DATA_DIR.resolve() else f"{TITLE} [data: {DATA_DIR.name}]"
+    res = subprocess.run(["whiptail", "--title", title, *opts, box, text, *size, *rest],
                          stderr=subprocess.PIPE, text=True, env=env)
     return res.returncode == 0, res.stderr.strip()
 
@@ -513,7 +516,8 @@ def record_payment():
     if not ok:
         return
 
-    args = ["record_payment.py", number, "--date", when.isoformat(), "--amount", amount]
+    args = ["record_payment.py", number, "--date", when.isoformat(), "--amount", amount,
+            "--dir", str(DATA_DIR)]
     if reference:
         args += ["--reference", reference]
     rc, out = run_script(*args, "--dry-run")
@@ -528,13 +532,22 @@ def record_payment():
 ACTIONS = [
     ("1", "Time log: start/stop, add, edit", time_log),
     ("2", "Quotes & orders: accept, invoice, expire, reject", quote_list),
-    ("3", "Invoices: open items", lambda: page("scan_overdue.py", "--all")),
-    ("4", "Customer POs: budget left", lambda: page("po_remaining.py")),
+    ("3", "Invoices: open items", lambda: page("scan_overdue.py", "--all", "--dir", str(DATA_DIR))),
+    ("4", "Customer POs: budget left", lambda: page("po_remaining.py", "--dir", str(DATA_DIR))),
     ("5", "Record a payment", record_payment),
 ]
 
 
 def main():
+    global DATA_DIR
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dir", default=str(DATA_DIR), help="data directory (time log in <dir>/time)")
+    args = ap.parse_args()
+    DATA_DIR = Path(args.dir).resolve()
+    if not DATA_DIR.is_dir():
+        sys.exit(f"ERROR: data directory {DATA_DIR} not found")
+    timelog.DIRS["data"] = DATA_DIR
+    timelog.DIRS["time"] = DATA_DIR / "time"
     if not shutil.which("whiptail"):
         sys.exit("whiptail not found (Debian/Ubuntu: package whiptail)")
     while True:

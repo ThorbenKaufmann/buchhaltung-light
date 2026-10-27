@@ -124,7 +124,12 @@ python3 timelog.py report --invoice RE20260005                  # PO + period fr
 #   time log:  s start, x stop, a add, e edit, d delete, ←→ day, t today
 #   quotes:    i invoice, a accepted, e expired, r rejected, u reopen, f filter
 python3 menu.py
+python3 menu.py --dir /tmp/demo/data                            # on a copy (demo, tests)
 ```
+
+With `--dir` the menu reads and writes only that data directory (title shows
+`[data: <name>]`); rendered PDFs still land next to the scripts, as on the
+command line.
 
 A quote is *ordered* as soon as a `poin_*.yaml` references it
 (`purchase.quote`); `quotes.py mark` writes a top-level `status:` block

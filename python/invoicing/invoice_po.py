@@ -307,6 +307,8 @@ def main():
     args = ap.parse_args()
 
     data_dir = Path(args.dir)
+    timelog.DIRS["data"] = data_dir
+    timelog.DIRS["time"] = data_dir / "time"
     _, order, _ = load_po(args.po, data_dir)
     billable = [str(l["assigned_id"]) for l in order.get("lines", []) if Decimal(str(l["quantity"])) != 0]
     quantities = {line_id: Decimal("0") for line_id in billable}
